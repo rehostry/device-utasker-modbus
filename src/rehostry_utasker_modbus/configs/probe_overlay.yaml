@@ -1,0 +1,6 @@
+# DIAGNOSTIC overlay: install the block-PC sampler at `main` so the boot path and
+# any spin are visible. See bp_handlers/pc_probe.py.
+intercepts:
+  - class: rehostry_utasker_modbus.bp_handlers.pc_probe.PcProbe
+    function: on_setup
+    symbol: main

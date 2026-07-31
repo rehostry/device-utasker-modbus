@@ -1,0 +1,3 @@
+# The firmware image and anything derived from it must NEVER be packaged.
+global-exclude *.bin *.out *.elf *.hex *.log
+prune **/__pycache__

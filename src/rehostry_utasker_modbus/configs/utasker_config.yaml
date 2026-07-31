@@ -1,0 +1,108 @@
+# Copyright 2026 Christopher Wright
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# uTasker MODBUS slave — HALucinator config (in-process unicorn backend).
+#
+# Target: ARMv7-M (Thumb) STM32, **uTasker RTOS** (a cooperative task scheduler,
+# not FreeRTOS/RIOT), running the uTasker **MODBUS slave** demo. The firmware
+# string `uTasker-MODBUS-slave` at 0x0801552a identifies the build.
+#
+# Layout recovered from the ELF (uEmu.uTasker_MODBUS.out, two PT_LOAD segments):
+#   vector table  0x0800c080  (ONLY 2 entries: init_SP + Reset -- see note below)
+#   code/rodata   0x0800c088 .. 0x08016049
+#   init SP       0x2002fffc  (vector[0])
+#   reset/entry   0x08015ecd  (vector[1], Thumb bit set)
+#
+# NOTE (honest): the corpus image is a PARTIAL flash image -- it starts at
+# 0x0800c080 (there is a ~48 KB bootloader region below it that is NOT in the
+# ELF), and only SP+Reset are present as vectors; everything from 0x0800c088 on
+# is code, so there are no IRQ handler vectors to dispatch to. The rehost
+# therefore runs the cooperative uTasker scheduler (uTaskerSchedule 0x0800e691)
+# rather than relying on interrupt delivery; peripheral events are driven at the
+# uTasker driver seam instead. uTaskerMODBUS.bin is this flat image padded from
+# 0x08000000 with 0xff so it can be mapped as one flash region.
+machine:
+  # unicorn's M-profile model is cortex-m3; it covers the ARMv7-M ISA used here.
+  arch: cortex-m3
+  cpu_model: cortex-m3
+  entry_addr: 0x08015ecd        # Reset (vector[1]) | Thumb bit
+  init_sp: 0x2002fffc           # vector[0]
+  vector_base: 0x0800c080       # VTOR (per the uEmu corpus cfg for this image)
+  interrupt_controller:
+    type: cortex_m
+
+memories:
+  # Flash. The padded image covers 0x08000000..0x08016049; map the whole 256 KB
+  # bank so any rodata/config read inside the bank is backed.
+  flash:
+    base_addr: 0x08000000
+    file: uTaskerMODBUS.bin
+    permissions: r-x
+    size: 0x00040000
+  # Main SRAM. init SP = 0x2002fffc, so the bank must cover 0x20000000..0x20030000.
+  sram:
+    base_addr: 0x20000000
+    permissions: rw-
+    size: 0x00030000
+  # HALucinator's IRQ/exception scratch windows (see backends/irq).
+  halucinator-irq:
+    base_addr: 0x03ffc000
+    size: 0x00004000
+  halucinator:
+    base_addr: 0x04000000
+    size: 0x00100000
+
+peripherals:
+  # Catch-all STM32 SoC window, split so the faithfully-modelled RCC page can sit
+  # in the middle without overlapping (HALucinator maps 4 kB-aligned regions and
+  # rejects overlaps). AutoPeripheral records accesses and applies the busy-wait
+  # breaker, so the remaining status polls converge without hand-modelling every
+  # register up front.
+  soc_low:
+    base_addr: 0x40000000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x00023000
+  # RCC (reset & clock control) at 0x40023800 — modelled so the firmware's own
+  # `enable -> poll for ready` clock bring-up completes on its own terms.
+  # See peripheral_models/stm32_rcc.py.
+  rcc:
+    base_addr: 0x40023000
+    emulate: rehostry_utasker_modbus.peripheral_models.stm32_rcc.Stm32Rcc
+    permissions: rw-
+    size: 0x00001000
+  soc_mid:
+    base_addr: 0x40024000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x00004000
+  # Ethernet MAC (0x40028000) + DMA (0x40029000) — descriptor rings, self-clearing
+  # busy bits and a link-up PHY, so the driver's own bring-up/RX walk completes.
+  # See peripheral_models/stm32_eth.py.
+  eth:
+    base_addr: 0x40028000
+    emulate: rehostry_utasker_modbus.peripheral_models.stm32_eth.Stm32Eth
+    permissions: rw-
+    size: 0x00002000
+  soc_high:
+    base_addr: 0x4002A000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x1FFD6000
+  # Cortex-M System Control Space (NVIC/SCB/SysTick at 0xE000E000).
+  #
+  # NOTE (honest): this is deliberately the plain AutoPeripheral catch-all. A
+  # faithful NVIC model lives in peripheral_models/cortex_m_scs.py and IS needed
+  # for the Ethernet RX path (see STATUS "the M4 blocker"), but wiring it here --
+  # even delegating every non-NVIC register back to AutoPeripheral -- starves the
+  # uTasker scheduler: the task loop stops dispatching (fnTaskEthernet runs once
+  # instead of ~10/s). Splitting this window into pages perturbs the busy-wait
+  # escalation the RTOS tick currently depends on. Left as the catch-all so the
+  # boot stays in its best known state; resolving this is the next step.
+  scs:
+    base_addr: 0xE0000000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x00100000
+
+intercepts: []

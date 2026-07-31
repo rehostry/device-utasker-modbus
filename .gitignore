@@ -1,0 +1,10 @@
+# The firmware image is NOT redistributed here: it is derived locally from the
+# uEmu research corpus (see PROVENANCE.md / tools/extract_firmware.py).
+*.bin
+*.out
+*.elf
+__pycache__/
+*.pyc
+
+# HALucinator per-run scratch dirs (created next to the configs at run time)
+tmp/

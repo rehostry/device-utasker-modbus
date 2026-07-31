@@ -1,0 +1,8 @@
+# Host <-> firmware Ethernet bridge: capture transmitted frames and deliver host
+# frames through the firmware's own fnSimulateEthernetIn. Installed at the uTasker
+# scheduler entry, which is the periodic safe point for delivering a frame.
+# See bp_handlers/eth_bridge.py.
+intercepts:
+  - class: rehostry_utasker_modbus.bp_handlers.eth_bridge.EthBridge
+    function: on_setup
+    symbol: uTaskerSchedule

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rehostry-utasker-modbus"
+version = "0.1.0"
+description = "uTasker MODBUS/TCP slave (STM32F4, ARMv7E-M) rehosted under HALucinator"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Christopher Wright", email = "cwright7101@gmail.com" }]
+dependencies = ["PyYAML"]
+
+[project.scripts]
+rehostry-utasker-modbus = "rehostry_utasker_modbus.cli:main"
+rehostry-utasker-modbus-panel = "rehostry_utasker_modbus.utasker_panel:main"
+rehostry-utasker-modbus-attack = "rehostry_utasker_modbus.attack:main"
+
+[project.optional-dependencies]
+extract = ["pyelftools"]
+dev = ["pytest>=7", "pyelftools"]
+
+[project.urls]
+Homepage = "https://github.com/rehostry/device-utasker-modbus"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rehostry_utasker_modbus = ["configs/*.yaml"]
