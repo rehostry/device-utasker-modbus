@@ -263,12 +263,50 @@ INDEX_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
  .flow{font:11px ui-monospace,Menlo,monospace;color:#8b949e;margin-top:8px;line-height:1.7}
  .log{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;height:150px;overflow:auto;font:11px/1.5 ui-monospace,Menlo,monospace;color:#8b949e}
  .note{color:#8b949e;font-size:11px;margin-top:8px;line-height:1.5}
+ details.brief{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 12px;margin:0 0 16px}
+ details.brief summary{cursor:pointer;font-weight:600;color:#e6edf3}
+ details.brief .body{margin-top:8px}
+ details.brief p{margin:6px 0;color:#8b949e;line-height:1.55}
+ details.brief b{color:#e6edf3} details.brief code{font:12px ui-monospace,Menlo,monospace}
 </style></head><body>
 <h1>uTasker MODBUS/TCP slave <span class="pill on">STM32F4 / ARMv7E-M</span></h1>
 <div class="sub">Real firmware answering MODBUS on its <b>own</b> network stack:
 host &rarr; <code>fnSimulateEthernetIn</code> &rarr; ARP/IPv4/TCP &rarr;
 <code>fnMODBUSListener</code> &rarr; <code>fnHandleMODBUS_input</code> &rarr;
 <code>fnSendMODBUS_response</code>. Every value below is in a response the firmware composed.</div>
+<details class="brief" open>
+ <summary>About this panel — what it is, what to do, what to expect</summary>
+ <div class="body">
+  <p><b>Device.</b> A rehosted STM32F4 (ARMv7E-M) running uTasker's MODBUS/TCP
+     <b>slave</b> firmware under HALucinator/unicorn — an industrial field device
+     answering MODBUS on <code>port 502</code> over its own network stack. Its
+     holding-register map is registers <b>2..6</b>; 0, 1 and &ge;7 answer
+     exception 0x02 (ILLEGAL DATA ADDRESS).</p>
+  <p><b>Steps.</b> 1) The firmware boots automatically when the panel starts
+     (~2 min to reach the MODBUS listener) — wait for the register table to fill;
+     2) optionally set a reg/value and click <b>Write</b>, then <b>Re-read map</b>,
+     to see an ordinary FC06 write; 3) click <b>Tamper with register 2</b> to fire
+     the unauthenticated-write attack.</p>
+  <p><b>What you're seeing.</b> <em>Holding registers (live, over MODBUS)</em> are
+     read straight from the firmware's own MODBUS engine — real values, not
+     synthesised. <em>session / polls / last response</em> and the <em>Event log</em>
+     are host bookkeeping (the panel's polling of <code>/state</code>). The
+     <em>Write a register</em> box and the attack card send FC06 requests the
+     firmware actually services.</p>
+  <p><b>The attack.</b> MODBUS/TCP has no authentication, authorisation or
+     integrity — anything that reaches <code>:502</code> can issue function code 6
+     (write single register). <b>Tamper with register 2</b> writes
+     <code>0x1234</code> into live register 2 with no credentials, reboots the
+     firmware with the write armed (it allows one MODBUS session per boot), then
+     reads&nbsp;→ writes&nbsp;→ reads back through the firmware's own engine.</p>
+  <p><b>Expect.</b> Success shows <b>slave serves attacker value: YES</b> and an
+     event-log line <em>TAMPERED: the slave now serves 0x12xx for register 2</em>.
+     Because these registers are live (low bits drift), the verdict compares the
+     read-back's <b>high byte</b> (0x12) to the byte written — a drifting low
+     nibble cannot fake it. A slave that authenticated or rejected the write would
+     show <b>not confirmed</b> instead (<code>landed=false</code>).</p>
+ </div>
+</details>
 <div class="wrap">
   <div class="card" style="flex:1 1 330px">
     <h2>Holding registers (live, over MODBUS)</h2>
