@@ -31,6 +31,24 @@ SPOOL = os.environ.get("HAL_UT_ETH_SPOOL", "/tmp/rehostry_utasker_eth")
 INBOX = os.path.join(SPOOL, "to_fw")
 TXLOG = os.path.join(SPOOL, "from_fw.pcap")
 
+
+def set_spool(path: str) -> str:
+    """Point this client at a specific bridge spool (and return it).
+
+    The spool directory IS the rendezvous with the firmware -- there is no
+    socket -- so it is also the client's only way of knowing *whose* guest it is
+    talking to. ``attack.run_attack`` generates a fresh unguessable spool per
+    spawn and hands it to the emulator it starts (``HAL_UT_ETH_SPOOL``), so a
+    stale/orphaned emulator, a concurrent panel or a decoy sitting on the shared
+    default path cannot answer for it. Callers that want the shared default
+    (the panel) simply never call this.
+    """
+    global SPOOL, INBOX, TXLOG
+    SPOOL = path
+    INBOX = os.path.join(SPOOL, "to_fw")
+    TXLOG = os.path.join(SPOOL, "from_fw.pcap")
+    return SPOOL
+
 # The firmware's identity, recovered from its own config/registers:
 #   IP  192.168.0.3   (uTasker network parameters at flash 0x08012ea4)
 #   MAC 00:00:00:00:00:00  (what it programmed into ETH_MACA0HR/LR)

@@ -8,3 +8,6 @@ __pycache__/
 
 # HALucinator per-run scratch dirs (created next to the configs at run time)
 tmp/
+
+# Editable-install metadata
+*.egg-info/

@@ -43,9 +43,11 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 from typing import Any, Callable, Dict, Optional
 
@@ -176,10 +178,58 @@ WARMUP_S = float(os.environ.get("UTASKER_WARMUP_S", "25"))
 CONNECT_DEADLINE_S = float(os.environ.get("UTASKER_CONNECT_DEADLINE_S", "150"))
 
 
-def _clear_spool() -> None:
-    """Start each self-booted run from a clean bridge spool so a stale frame from
-    a previous run is never replayed into this firmware."""
-    shutil.rmtree(modbus.SPOOL, ignore_errors=True)
+def _private_spool() -> str:
+    """A fresh, unguessable bridge spool for THIS spawn, and point the client at it.
+
+    ⛔ THIS IS THE ATTACK'S IDENTITY CHALLENGE, and it has to be, because this
+    device has no bridge socket: the rendezvous with the guest is a spool
+    DIRECTORY that ``bp_handlers/eth_bridge.py`` services. The old code used the
+    fixed shared path ``/tmp/rehostry_utasker_eth`` for every run, which is the
+    same defect as grading whatever answers on a well-known port:
+
+      * an orphaned emulator from an earlier run (or a panel booted alongside)
+        keeps servicing that directory, so the client can get a full ARP -> SYN
+        -> MODBUS round trip out of a guest THIS ATTACK NEVER STARTED, and
+      * ``rmtree`` on a shared path also stamps on a concurrent session's spool.
+
+    A per-spawn random directory closes both: the emulator this attack starts is
+    told the path via ``HAL_UT_ETH_SPOOL`` and no other process can guess it, so
+    every frame the oracle reads provably came from the child we spawned (whose
+    liveness and bridge-installation line we also check -- see ``_verify_child``).
+    """
+    path = os.path.join(tempfile.gettempdir(),
+                        "rehostry_utasker_eth-%s" % secrets.token_hex(8))
+    shutil.rmtree(path, ignore_errors=True)
+    os.makedirs(os.path.join(path, "to_fw"), exist_ok=True)
+    return modbus.set_spool(path)
+
+
+def _verify_child(proc: Optional[subprocess.Popen], log_path: str,
+                  spool: str) -> Dict[str, Any]:
+    """Provenance: the peer must be the emulator THIS process spawned.
+
+    Three independent facts, all of which must hold, and all of which are
+    returned so the verdict can be audited rather than trusted:
+      * ``spawned`` -- we have a child process object at all;
+      * ``bridge_bound`` -- that child's own log announces the eth bridge
+        installed **on our private spool path** (the analogue of the fleet's
+        "abort unless the child's log shows a successful bind");
+      * ``alive`` -- it was still running when the oracle ran, so the frames we
+        graded were not the residue of something else.
+    """
+    out: Dict[str, Any] = {"spawned": proc is not None,
+                           "pid": None if proc is None else proc.pid,
+                           "spool": spool, "bridge_bound": False,
+                           "alive": proc is not None and proc.poll() is None}
+    try:
+        with open(log_path, "r", errors="replace") as fh:
+            blob = fh.read()
+        out["bridge_bound"] = ("eth_bridge: installed" in blob
+                               and ("spool=%s" % spool) in blob)
+    except OSError:
+        pass
+    out["ok"] = bool(out["spawned"] and out["bridge_bound"] and out["alive"])
+    return out
 
 
 def _shutdown(proc: Optional[subprocess.Popen], logf) -> None:
@@ -249,14 +299,16 @@ def run_attack(on_stage: Optional[Callable] = None,
     os.makedirs(ld, exist_ok=True)
     log_path = os.path.join(ld, "utasker_modbus_attack.log")
 
-    _clear_spool()
+    spool = _private_spool()
+    result["spool"] = spool
     proc: Optional[subprocess.Popen] = None
     logf = None
     sport = 50400
     try:
         argv = spawn.spawn_argv(emulator=emulator,
                                 overlays=[paths.ETH_BRIDGE_OVERLAY])
-        env = spawn.spawn_env(extra={"HAL_ION_QUIET": "1"})
+        env = spawn.spawn_env(extra={"HAL_ION_QUIET": "1",
+                                     "HAL_UT_ETH_SPOOL": spool})
         logf = open(log_path, "w")
         stage("boot",
               note="booting uTasker MODBUS/TCP slave (STM32F4, ARMv7E-M) + eth "
@@ -288,7 +340,17 @@ def run_attack(on_stage: Optional[Callable] = None,
         # firmware's own MODBUS engine; landed iff the high byte survived.
         res = atk.arm(reg, value)
         result["attack"] = res
-        result["landed"] = bool(res.get("landed"))
+        # GATE the verdict on provenance (playbook: "a control that cannot fail
+        # the verdict is not a control"). `landed` is the firmware's own
+        # read-back AND the proof that the guest which produced it is the child
+        # this process spawned, on this run's private spool.
+        prov = _verify_child(proc, log_path, spool)
+        result["provenance"] = prov
+        result["landed"] = bool(res.get("landed")) and bool(prov.get("ok"))
+        if res.get("landed") and not prov.get("ok"):
+            stage("provenance", result=prov,
+                  note="REFUSED: the MODBUS answers did not come from the "
+                       "emulator this attack spawned")
         stage("attack", result=res,
               note="FC06 wrote 0x%04x to register %d -> read-back %s; landed=%s"
                    % (value, reg, res.get("after_hex"), res.get("landed")))
@@ -300,6 +362,7 @@ def run_attack(on_stage: Optional[Callable] = None,
         return result
     finally:
         _shutdown(proc, logf)
+        shutil.rmtree(spool, ignore_errors=True)   # our own private spool only
         stage("shutdown", note="rehost stopped")
 
 

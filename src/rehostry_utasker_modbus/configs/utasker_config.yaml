@@ -91,18 +91,32 @@ peripherals:
     size: 0x1FFD6000
   # Cortex-M System Control Space (NVIC/SCB/SysTick at 0xE000E000).
   #
-  # NOTE (honest): this is deliberately the plain AutoPeripheral catch-all. A
-  # faithful NVIC model lives in peripheral_models/cortex_m_scs.py and IS needed
-  # for the Ethernet RX path (see STATUS "the M4 blocker"), but wiring it here --
-  # even delegating every non-NVIC register back to AutoPeripheral -- starves the
-  # uTasker scheduler: the task loop stops dispatching (fnTaskEthernet runs once
-  # instead of ~10/s). Splitting this window into pages perturbs the busy-wait
-  # escalation the RTOS tick currently depends on. Left as the catch-all so the
-  # boot stays in its best known state; resolving this is the next step.
+  # This is the AutoPeripheral catch-all with ONE register taken out of its
+  # hands: SCB_VTOR (0xE000ED08). See peripheral_models/cortex_m_scs.py
+  # (ScsCatchAll) for the disassembly -- uTasker's software frame dispatch does
+  # `ldr r4,[VTOR]` / `ldrmi r1,[r4,#0x134]` / `blxmi r1`, so a VTOR answered by
+  # the busy-wait breaker (0xFFFFFFFF) or by the catch-all default (0) makes the
+  # handler fetch land at 0x133 / 0x134 and kills the emulation with
+  # UC_ERR_READ_UNMAPPED. VTOR is a base-address register, not a status
+  # register; modelled write-through/read-back it answers 0x20000000, the value
+  # the firmware itself writes at pc=0x0800c11a when it relocates the table into
+  # SRAM. Everything else in the window keeps AutoPeripheral's behaviour --
+  # notably the NVIC enable/pending aliases, whose busy-wait escalation is what
+  # this firmware's software ISR dispatch is gated on.
+  #
+  # NOTE (honest, unchanged): the FULL NVIC model in that same file (CortexMScs)
+  # is still NOT wired. Replacing the ISER/ICER/ISPR/ICPR escalation with a
+  # faithful register file starves the uTasker scheduler (the task loop stops
+  # dispatching: fnTaskEthernet runs once instead of ~10/s). Only the VTOR
+  # register is modelled here.
   scs:
     base_addr: 0xE0000000
-    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    emulate: rehostry_utasker_modbus.peripheral_models.cortex_m_scs.ScsCatchAll
     permissions: rw-
     size: 0x00100000
+    properties:
+      # Reset value of SCB_VTOR = machine.vector_base, until the firmware
+      # relocates the table itself (it writes 0x20000000 at pc=0x0800c11a).
+      vtor_reset: 0x0800c080
 
 intercepts: []

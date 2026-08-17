@@ -63,6 +63,30 @@ DMACHRBAR = 0x1054       # current host receive buffer address
 MACMIIAR_MB = 1 << 0     # MII busy — hardware-cleared
 DMABMR_SR = 1 << 0       # software reset — hardware-cleared
 
+# ETH_DMASR bits [16:0] are **rc_w1** (RM0090 §33.8.14): software acknowledges an
+# event by writing a 1 to its bit. `EMAC_Interrupt` (0x0800c400) depends on it:
+#
+#   0x0800c408  ldr r0,[r4]        ; r4 = 0x40029014 = ETH_DMASR
+#   0x0800c40a  lsls r2,r0,#25     ; bit 6 = RS (receive status)
+#   0x0800c40c  bpl 0x800c41c
+#   0x0800c412  str r3,[r4]        ; r3 = 0x00010040 = RS|NIS -> ACKNOWLEDGE
+#   0x0800c418  bl  uTaskerStateChange('E', 4)
+#   0x0800c41c  ldr r0,[r4,#8] / ldr r1,[r4] / tst (r0&r1),#0x0001e7ff
+#   0x0800c428  bne 0x800c408      ; ...loop while any enabled event is pending
+#
+# Store that 0x00010040 verbatim and RS is still set on the next pass, so the ISR
+# spins on 0x0800c408 forever (MEASURED: 100% of guest time in that block plus
+# uTaskerStateChange, no scheduler passes, device answers nothing).
+DMASR_RC_W1 = 0x0001FFFF
+
+# The ONE writer that must still SET the flag: `fnSimulateEthernetIn`
+# (0x0800c77c..0x0800c816) is uTasker's software-reception shim, standing in for
+# the DMA engine — it lands the frame in the RX descriptor and then does
+# `ldr r1,[r6]; orr r1,#0x40; str r1,[r6]` at 0x0800c7e0..0x0800c7e6 to raise RS
+# exactly as the DMA would. Nothing on real silicon *sets* DMASR from software,
+# so this range is the stand-in for hardware, not a software acknowledgement.
+SIM_RX_LO, SIM_RX_HI = 0x0800C77C, 0x0800C816
+
 # The board's PHY is a Microchip **LAN8742A**: fnConfigEthernet reads PHYIDR1/2
 # (MII regs 2 and 3), forms (PHYIDR1 << 16) | PHYIDR2, masks off the low 4
 # revision bits, and compares against the literal 0x0007c130 at 0x0800d0b8:
@@ -142,6 +166,12 @@ class Stm32Eth(AutoPeripheral):
         shift = (offset & 0x3) * 8
         mask = self._mask(size) << shift
         cur = self.regs.get(reg, 0)
-        self.regs[reg] = (cur & ~mask) | ((value << shift) & mask)
+        written = (value << shift) & mask
+        if reg == DMASR and not (SIM_RX_LO <= pc < SIM_RX_HI):
+            # Software acknowledgement: rc_w1 (see DMASR_RC_W1 above). Writes
+            # from the DMA stand-in keep plain store semantics.
+            self.regs[reg] = cur & ~(written & DMASR_RC_W1)
+        else:
+            self.regs[reg] = (cur & ~mask) | written
         if _TRACE:
             log.error("ETH wr  +0x%04x <- 0x%08x  (pc=0x%08x)", offset, value, pc)
