@@ -77,7 +77,7 @@ class ModbusWriteAttack:
     def read_map(self) -> dict:
         """The slave's register map as it serves it right now."""
         out = {}
-        if self.session is None:
+        if self.session is None or SEAM_CONTROL:
             return out
         for a in VALID_REGISTERS:
             r = self.session.read_holding(a, 1)
@@ -91,6 +91,13 @@ class ModbusWriteAttack:
             return {"reg": reg, "value": value, "landed": False,
                     "note": "could not open a MODBUS session to the firmware "
                             "(is the rehost running with the eth bridge?)"}
+        if SEAM_CONTROL:
+            return {"reg": reg, "value": value, "landed": False,
+                    "before": None, "write_acknowledged": False,
+                    "after": None, "after_hex": None,
+                    "note": "HAL_SEAM_CONTROL=1: the session was opened but no "
+                            "MODBUS PDU was sent, so the slave's engine never "
+                            "answered"}
         s = self.session
         before = modbus.reg_value(s.read_holding(reg, 1))
         ack = s.write_single(reg, value)
@@ -173,6 +180,13 @@ def run_modbus_write_demo(on_stage: Optional[Callable] = None,
 # The firmware needs its ARP/ETH bring-up to finish before the first connect
 # (see utasker_panel.modbus_connect); connecting the instant the listener answers
 # yields a fragile session. Overridable for a slow host.
+#: Falsification knob for the census seam.  With ``HAL_SEAM_CONTROL=1`` the TCP
+#: session is still opened but no MODBUS PDU is ever sent, so the firmware's own
+#: MODBUS engine never answers and ``modbus_round_trip`` -- and therefore
+#: ``landed`` -- must come out false.  A seam boolean that no control can move
+#: is not evidence.
+SEAM_CONTROL = os.environ.get("HAL_SEAM_CONTROL") == "1"
+
 WARMUP_S = float(os.environ.get("UTASKER_WARMUP_S", "25"))
 # How long to keep retrying the MODBUS handshake after the warm-up.
 CONNECT_DEADLINE_S = float(os.environ.get("UTASKER_CONNECT_DEADLINE_S", "150"))
@@ -287,7 +301,9 @@ def run_attack(on_stage: Optional[Callable] = None,
         if on_stage:
             on_stage(name, **d)
 
-    result: Dict[str, Any] = {"booted": False, "landed": False}
+    result: Dict[str, Any] = {"booted": False, "landed": False,
+                              "milestone": "M1", "modbus_round_trip": False,
+                              "seam_control": SEAM_CONTROL}
 
     if not paths.firmware_present():
         stage("error", note="firmware not extracted at %s -- run "
@@ -325,6 +341,10 @@ def run_attack(on_stage: Optional[Callable] = None,
                        % log_path)
             return result
         result["booted"] = True
+        # M2/M3: the firmware's own uNetwork stack answered ARP and completed a
+        # TCP handshake on port 502, which needs its drivers up and its task
+        # scheduler turning over -- not merely "it did not fault".
+        result["milestone"] = "M3"
         stage("connect",
               note="MODBUS/TCP session up to %s:%d -- no credentials were offered "
                    "or requested" % (modbus.FW_IP, modbus.MODBUS_PORT))
@@ -346,7 +366,14 @@ def run_attack(on_stage: Optional[Callable] = None,
         # this process spawned, on this run's private spool.
         prov = _verify_child(proc, log_path, spool)
         result["provenance"] = prov
-        result["landed"] = bool(res.get("landed")) and bool(prov.get("ok"))
+        # THE SEAM (M4).  An FC06 request goes in over MODBUS/TCP and the
+        # firmware's OWN MODBUS engine answers it, then answers an independent
+        # FC03 read-back carrying the attacker's value.  Inbound protocol
+        # request -> outbound firmware-composed reply.
+        result["modbus_round_trip"] = bool(res.get("landed"))
+        result["landed"] = bool(result["modbus_round_trip"]) and bool(prov.get("ok"))
+        if result["landed"]:
+            result["milestone"] = "M4"
         if res.get("landed") and not prov.get("ok"):
             stage("provenance", result=prov,
                   note="REFUSED: the MODBUS answers did not come from the "
@@ -375,7 +402,9 @@ def main() -> int:
 
     res = run_attack(on_stage=show)
     print("RESULT:", json.dumps({k: v for k, v in res.items()
-                                 if k in ("booted", "landed")}))
+                                 if k in ("booted", "landed", "milestone",
+                                          "modbus_round_trip",
+                                          "seam_control")}))
     return 0 if res.get("landed") else 1
 
 
