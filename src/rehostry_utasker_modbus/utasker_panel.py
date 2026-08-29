@@ -443,7 +443,7 @@ def main(argv=None) -> int:
         prog="rehostry-utasker-modbus-panel",
         description="Live MODBUS/TCP slave panel for the uTasker rehost.")
     p.add_argument("--http-port", type=int,
-                   default=int(os.environ.get("UTASKER_HTTP_PORT", "8787")))
+                   default=int(os.environ.get("UTASKER_HTTP_PORT", "29293")))
     p.add_argument("--hal-log", default=os.environ.get(
         "UTASKER_HAL_LOG", "/tmp/rehostry_utasker_panel_hal.log"))
     p.add_argument("--emulator", default="unicorn")

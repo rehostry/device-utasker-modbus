@@ -117,7 +117,7 @@ unwired with that caveat recorded in the config.
 
 ## PASS 2 — panel + attack
 
-* **`utasker_panel.py` (console script `rehostry-utasker-modbus-panel`, port 8787).**
+* **`utasker_panel.py` (console script `rehostry-utasker-modbus-panel`, port 29293).**
   Holds a MODBUS/TCP session against the firmware's own stack and shows the slave's
   live holding-register map. Probing recovered the map: **registers 2..6 exist**
   (0, 1 and >=7 answer exception 0x02), values e.g. `[16, 65504, 768, 64512, 0]`,

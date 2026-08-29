@@ -93,7 +93,7 @@ Diagnostics: `HAL_UT_PROBE_TRACE=N`, `HAL_UT_WATCH=0xaddr,...`,
 ## Panel and attack
 
 A live web panel ships as the console script `rehostry-utasker-modbus-panel`
-(module `utasker_panel`), served on **http://127.0.0.1:8787**:
+(module `utasker_panel`), served on **http://127.0.0.1:29293**:
 
 ```sh
 rehostry-utasker-modbus-panel      # boots the rehost + opens the panel
@@ -149,7 +149,7 @@ src/rehostry_utasker_modbus/
 ├── peripheral_models/stm32_rcc.py       RCC enable->ready coupling
 ├── peripheral_models/stm32_eth.py       ETH MAC+DMA + LAN8742A PHY
 ├── peripheral_models/cortex_m_scs.py    NVIC semantics (not yet wired -- see STATUS)
-├── utasker_panel.py                     live MODBUS slave panel (:8787) + attack
+├── utasker_panel.py                     live MODBUS slave panel (:29293) + attack
 ├── attack.py                            unauthenticated MODBUS FC06 write
 ├── modbus.py                            raw-Ethernet ARP/IPv4/TCP/MODBUS client
 ├── cli.py · paths.py · spawn.py         device descriptor + spawn recipe
