@@ -132,7 +132,7 @@ def _log(line: str) -> None:
 
 def kill_tree(proc: subprocess.Popen) -> None:
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        os.killpg(proc.pid, signal.SIGTERM)
     except (ProcessLookupError, OSError):
         pass
     try:
@@ -141,7 +141,7 @@ def kill_tree(proc: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         pass
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, OSError):
         pass
 
