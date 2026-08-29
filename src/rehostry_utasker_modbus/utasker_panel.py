@@ -380,7 +380,7 @@ function doWrite(){
 }
 function post(p){fetch(p,{method:'POST'}).then(()=>setTimeout(poll,800));}
 // Poll /state (plain GET) instead of SSE: buffering proxies (e.g. Cloudflare
-// tunnels) would never flush text/event-stream to a phone.
+// tunnels) would never flush a server-push stream to a phone.
 function poll(){fetch('/state').then(r=>r.json()).then(render).catch(()=>{});}
 poll(); setInterval(poll, 1500);
 </script></body></html>"""
