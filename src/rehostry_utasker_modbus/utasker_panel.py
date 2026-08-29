@@ -60,7 +60,33 @@ _STATE = {
     "target_register": attack.TARGET_REGISTER,
     "attack_value": "0x%04x" % attack.ATTACK_VALUE,
     "fw_ip": modbus.FW_IP, "port": modbus.MODBUS_PORT,
+    "busy": False, "run_id": 0,
 }
+
+#: Run generation, published as ``run_id``.
+#:
+#: ``/state`` must never hand a poller a verdict that belongs to an EARLIER run,
+#: so :meth:`Handler.do_POST` bumps this and clears ``attack`` inside the SAME
+#: ``_LOCK`` acquisition that accepts the POST.  Every worker write is gated on
+#: ``run_id == _GEN``.
+#:
+#: On this device the attack REBOOTS the firmware (one MODBUS session per boot),
+#: so its verdict lands seconds after the POST returns.  Without the gate a
+#: second POST arriving in that window armed a second reboot on top of the first
+#: and both wrote into the same ``attack`` pane.
+_GEN = 0
+
+
+def _finish(run_id) -> None:
+    """Clear ``busy`` only if this run is still the current one."""
+    with _LOCK:
+        if run_id is None or run_id == _GEN:
+            _STATE["busy"] = False
+
+
+def _current(run_id) -> bool:
+    with _LOCK:
+        return run_id is None or run_id == _GEN
 
 ARGS: argparse.Namespace
 _SESSION = {"s": None, "sport": 50500}
@@ -86,6 +112,14 @@ def _fresh_session():
 
 def _set(**kw) -> None:
     with _LOCK:
+        _STATE.update(kw)
+
+
+def _set_run(run_id, **kw) -> None:
+    """Publish only if this run has not been superseded."""
+    with _LOCK:
+        if run_id is not None and run_id != _GEN:
+            return
         _STATE.update(kw)
 
 
@@ -152,7 +186,7 @@ def _publish(regs: dict) -> None:
                                  if alive else "no reply")
 
 
-def modbus_connect() -> None:
+def modbus_connect(run_id=None) -> None:
     """Open one MODBUS session and read the register map once."""
     # Let the firmware settle before the first attempt. Connecting the instant the
     # listener answers yields a fragile session (only the first register read gets a
@@ -161,6 +195,8 @@ def modbus_connect() -> None:
     atk = attack.ModbusWriteAttack(sport=50500)
     tries = 0
     while _SESSION["s"] is None:
+        if not _current(run_id):
+            return          # superseded: stop, and write nothing
         # Drop anything left queued by a failed attempt: the bridge delivers one
         # frame per scheduler pass, so a stale backlog would be replayed later.
         modbus.drain_inbox()
@@ -169,7 +205,7 @@ def modbus_connect() -> None:
             _log("waiting for the firmware's MODBUS listener (attempt %d)" % tries)
         if atk.connect():
             _SESSION["s"] = atk
-            _set(booted=True, session=True, phase="MODBUS")
+            _set_run(run_id, booted=True, session=True, phase="MODBUS")
             _log("MODBUS/TCP session up to %s:%d -- no credentials were offered "
                  "or requested" % (modbus.FW_IP, modbus.MODBUS_PORT))
             regs = _read_map_burst(atk)
@@ -181,7 +217,7 @@ def modbus_connect() -> None:
                 _log("unauthenticated FC06 write -> register %d = 0x%04x"
                      % (attack.TARGET_REGISTER, attack.ATTACK_VALUE))
                 res = atk.arm(attack.TARGET_REGISTER, attack.ATTACK_VALUE)
-                _set(attack=res)
+                _set_run(run_id, attack=res)
                 if res.get("landed"):
                     _log("TAMPERED: the slave now serves %s for register %d "
                          "(was %s) -- with no authentication at any point"
@@ -195,46 +231,60 @@ def modbus_connect() -> None:
         time.sleep(2.0)
 
 
-def _do_refresh() -> None:
-    a = _fresh_session()
-    if a is None:
-        _log("could not open a MODBUS session")
-        _set(session=False)
-        return
-    regs = _read_map_burst(a)
-    _publish(regs)
-    _log("refreshed: %s" % list(regs.values()))
+def _do_refresh(run_id=None) -> None:
+    try:
+        a = _fresh_session()
+        if a is None:
+            _log("could not open a MODBUS session")
+            _set_run(run_id, session=False)
+            return
+        regs = _read_map_burst(a)
+        _publish(regs)
+        _log("refreshed: %s" % list(regs.values()))
+    finally:
+        _finish(run_id)
 
 
-def _do_write(reg: int, value: int) -> None:
-    a = _fresh_session()
-    if a is None:
-        _log("could not open a MODBUS session")
-        return
-    ack = a.session.write_single(reg, value)
-    ok = bool(ack and not (ack[0] & 0x80))
-    _log("FC06 wrote 0x%04x to register %d (%s)"
-         % (value, reg, "acknowledged" if ok else "rejected"))
+def _do_write(run_id, reg: int, value: int) -> None:
+    try:
+        a = _fresh_session()
+        if a is None:
+            _log("could not open a MODBUS session")
+            return
+        ack = a.session.write_single(reg, value)
+        ok = bool(ack and not (ack[0] & 0x80))
+        _log("FC06 wrote 0x%04x to register %d (%s)"
+             % (value, reg, "acknowledged" if ok else "rejected"))
+    finally:
+        _finish(run_id)
 
 
-def _do_attack() -> None:
+def _do_attack(run_id=None) -> None:
     """Arm the attack and reboot the firmware.
 
     The firmware allows one MODBUS session per boot and that session is already
     spent by the map read, so the attack cannot open its own. Rebooting with the
     attack armed lets the fresh boot's single session carry read -> write -> verify.
     """
-    _log("arming the unauthenticated write and rebooting the firmware "
-         "(one MODBUS session per boot)")
-    _ARMED["v"] = True
-    _SESSION["s"] = None
-    _set(session=False, phase="REBOOT", attack=None, regs={})
-    proc = _PROC["p"]
-    if proc is not None:
-        kill_tree(proc)
-    modbus.drain_inbox()
-    _PROC["p"] = boot_firmware(ARGS.hal_log, ARGS.emulator)
-    threading.Thread(target=modbus_connect, daemon=True).start()
+    try:
+        _log("arming the unauthenticated write and rebooting the firmware "
+             "(one MODBUS session per boot)")
+        _ARMED["v"] = True
+        _SESSION["s"] = None
+        # `attack` was already cleared by do_POST, under the same lock /state
+        # reads, before the POST was answered.
+        _set_run(run_id, session=False, phase="REBOOT", regs={})
+        proc = _PROC["p"]
+        if proc is not None:
+            kill_tree(proc)
+        modbus.drain_inbox()
+        _PROC["p"] = boot_firmware(ARGS.hal_log, ARGS.emulator)
+        # Connect INLINE: the verdict lands inside modbus_connect, so the run
+        # must stay busy until then. Handing it to a detached thread is what let
+        # a second POST be accepted while this run's verdict was still pending.
+        modbus_connect(run_id)
+    finally:
+        _finish(run_id)
 
 
 INDEX_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
@@ -378,7 +428,13 @@ function doWrite(){
   fetch('/write',{method:'POST',body:JSON.stringify({reg:r,value:v})})
     .then(()=>setTimeout(poll,600));
 }
-function post(p){fetch(p,{method:'POST'}).then(()=>setTimeout(poll,800));}
+// A control POST that arrives while a run is in flight is REFUSED with 409 --
+// it is never silently raced and answered 200. Surface it, so the operator sees
+// that the click did not start a run rather than reading the previous run's
+// verdict as this one's.
+function post(p){fetch(p,{method:'POST'}).then(r=>{
+  if(r.status===409){alert('refused (409): a run is already in flight');}
+  setTimeout(poll,800);});}
 // Poll /state (plain GET) instead of SSE: buffering proxies (e.g. Cloudflare
 // tunnels) would never flush a server-push stream to a phone.
 function poll(){fetch('/state').then(r=>r.json()).then(render).catch(()=>{});}
@@ -416,7 +472,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "text/plain", b"not found")
 
     def do_POST(self) -> None:  # noqa: N802
+        global _GEN
         path = self.path.split("?", 1)[0]
+        args: tuple = ()
         if path == "/write":
             n = int(self.headers.get("Content-Length") or 0)
             try:
@@ -426,15 +484,51 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, TypeError):
                 self._send(400, "application/json", b'{"error":"bad request"}')
                 return
-            threading.Thread(target=_do_write, args=(reg, val), daemon=True).start()
+            worker, args = _do_write, (reg, val)
         elif path == "/refresh":
-            threading.Thread(target=_do_refresh, daemon=True).start()
+            worker = _do_refresh
         elif path == "/attack":
-            threading.Thread(target=_do_attack, daemon=True).start()
+            worker = _do_attack
         else:
             self._send(404, "text/plain", b"not found")
             return
-        self._send(200, "application/json", b'{"ok":true}', cache=False)
+
+        # ACCEPTING the POST and SUPERSEDING the previous run are ONE atomic
+        # step, under the same lock `/state` reads.
+        #
+        # The shape this replaces started a worker thread for every POST and
+        # always answered 200 -- there was no busy flag at all. Because the
+        # attack REBOOTS the firmware and its verdict lands seconds later inside
+        # modbus_connect, a POST arriving in that window armed a second reboot
+        # on top of the first while `/state` still carried whatever `attack`
+        # verdict was standing. A caller that POSTs a control arm and then polls
+        # reads that verdict and credits it to the POST it just made.
+        #
+        # So: a POST that cannot run now is REFUSED (409), never raced; and a
+        # POST that is accepted clears the previous run's verdict before this
+        # method returns.
+        with _LOCK:
+            busy = _STATE["busy"]
+            if busy:
+                self._send(409, "application/json", json.dumps(
+                    {"ok": False, "busy": True,
+                     "reason": "a run is already in flight",
+                     "phase": _STATE["phase"],
+                     "run_id": _STATE["run_id"]}).encode(), cache=False)
+                return
+            _GEN += 1
+            run_id = _GEN
+            _STATE.update(busy=True, run_id=run_id, attack=None)
+            try:
+                threading.Thread(target=worker, args=(run_id,) + args,
+                                 daemon=True).start()
+            except Exception:                              # noqa: BLE001
+                # never strand the panel in a permanent busy state
+                _STATE["busy"] = False
+                raise
+        self._send(200, "application/json",
+                   json.dumps({"ok": True, "run_id": run_id}).encode(),
+                   cache=False)
 
 
 def main(argv=None) -> int:
