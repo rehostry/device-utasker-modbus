@@ -301,8 +301,20 @@ def run_attack(on_stage: Optional[Callable] = None,
         if on_stage:
             on_stage(name, **d)
 
+    # ⚠ THE SEEDED RUNG WAS A CONSTANT ABOVE M0, AND A DEAD ARM PROVED IT.
+    # This dict is returned verbatim on the failure paths below, and it was
+    # seeded `"milestone": "M1"` -- a CONSTANT, so a run in which nothing
+    # executed still claimed the rung "boots without faulting". Measured
+    # 2026-09-05 with `uTaskerMODBUS.bin` moved off disk (restored byte-identical,
+    # sha256 dc28f428...): the RESULT line read
+    #   booted:false landed:false milestone:"M1"
+    # which the fleet guard scores WALL-M1 and the census counts as an M1
+    # device. The contradicting `booted: False` was in the same dict.
+    # M0 is the only rung a run with no firmware has earned. Every rung above
+    # it is still assigned from evidence further down, so the LIVE arm is
+    # unchanged.
     result: Dict[str, Any] = {"booted": False, "landed": False,
-                              "milestone": "M1", "modbus_round_trip": False,
+                              "milestone": "M0", "modbus_round_trip": False,
                               "seam_control": SEAM_CONTROL}
 
     if not paths.firmware_present():
