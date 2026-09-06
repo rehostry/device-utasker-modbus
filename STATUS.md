@@ -1,10 +1,175 @@
-<!-- rehostry-census: milestone=M4 landed=true verdict=M4-OK verified=2026-08-28 method=live-run -->
+<!-- rehostry-census: milestone=M7 landed=true verdict=M4-OK verified=2026-09-05 method=live-run note=M5-M8-undefined-single-interface -->
 <!-- Copyright 2026 Christopher Wright; SPDX-License-Identifier: AGPL-3.0-or-later -->
 # STATUS — uTasker MODBUS slave (STM32F4 / ARMv7E-M) rehost
 
-**Current milestone: M4 — a genuine MODBUS/TCP round-trip on :502 against the
-firmware's own stack.** Verified end to end: ARP resolve -> TCP 3-way handshake ->
-FC03 request -> the firmware's own MODBUS reply.
+**Current milestone: M7.** M4 is a genuine MODBUS/TCP round-trip on :502
+against the firmware's own stack, verified end to end: ARP resolve -> TCP 3-way
+handshake -> FC03 request -> the firmware's own MODBUS reply. On the **same
+boot and the same TCP session** the rehost is also **M6 (stateful)** and **M7
+(adversarial-input tolerance)**, each graded off M4 rather than off the other.
+
+**M5 and M8 are UNDEFINED here, not failed.** One link, one application service
+on it (MODBUS/TCP on :502), one peer. RULES §1a excludes two function codes over
+one framing layer as a second interface, and the ARP replies and the TCP
+handshake underneath are **stack-level reflexes** — substrate, by the
+2026-09-02 ruling — not a second interface, however genuinely the guest computes
+them. The 2026-09-02 ruling that **M6/M7 do not require M5** is what makes those
+two rungs claimable here on their own evidence.
+
+**No `path=` in the census header, on purpose.** The M6 and M7 phases run on the
+*default* invocation `python3 -m rehostry_utasker_modbus.attack`, so the rung a
+verifier reads is the rung the documented command produces (playbook w35).
+`--no-ladder` restores the M4-only run. A whole run is ~34 s.
+
+## 2026-09-05 — M4 → M7
+
+### Could the gate print M7 before this session? No.
+
+`run_attack` assigned `"M0"` / `"M3"` / `"M4"` and had **no branch above M4 at
+all**, so no behaviour of the firmware could have produced a higher rung.
+Nothing about the device changed to reach M6 and M7; the run now measures two
+rungs it could already demonstrate, and both `M6` and `M7` are shown to be
+*printable* by a run — `--m7-wellformed` prints `M6`, the default path prints
+`M7`.
+
+### The register map, re-derived — and only ONE register is a usable witness
+
+`STATUS`'s existing note that "the low bits are live" understates it. Measured
+on an untouched boot, three back-to-back `FC03 2,5` reads:
+
+```
+[0x0010, 0xFFF0, 0x0100, 0xFF00, 0x0000]
+[0x0020, 0xFFE0, 0x0200, 0xFE00, 0x0000]
+[0x0030, 0xFFD0, 0x0300, 0xFD00, 0x0000]
+```
+
+Registers **2..5 ramp on their own** with the firmware's execution — `%2` by
+`+0x10`, `%3` by `-0x10`, `%4` by `+0x100`, `%5` by `-0x100` — and **register 6
+does not move at all**: a value written there is served back byte-exact
+(`0xBEEF -> 0xBEEF`, `0x1357 -> 0x1357`), whereas a write to `%5` came back
+`0x2468 -> 0x2368`. So register 6 is the only sound attacker-controlled state
+witness on this device, and 2..5 are what proves the guest is running its own
+state machine between two reads.
+
+### M6 — the same input at two different states, two different correct outputs
+
+**3 of 3 rounds, six per-round terms each.** Each round reads state A with two
+**bare queries that carry no value of their own** (`FC03 6,1` and `FC03 2,5`),
+writes a fresh 16-bit random into register 6, and reads state B with the same
+two. Three witnesses of three different kinds, all of which must differ and be
+correct in every round:
+
+| witness | what it shows |
+|---|---|
+| **the attacker's value** | `FC03 6,1` differs between the reads and equals the value this round drew from the run's RNG. |
+| **the guest's own clock** | register 4 has ADVANCED between the two reads. **No phase of this run ever writes register 4**, so the movement is the firmware's own execution and not an after-effect of our traffic. |
+| **an invariant the firmware maintains between two of its own registers** | `reg5 == -reg4` mod 2¹⁶, at BOTH reads. No request carries either side of that relation, and a replayed or fabricated block does not satisfy it while also ramping. |
+
+**A refutation I found by running it, and did not paper over.** The first cut
+asserted the same pairing for `%2`/`%3` as well, and **failed 3 of 3 rounds** —
+correctly. The M4 phase earlier in the same run does an `FC06` write into
+register **2**, which desyncs that pair permanently, while `%4`/`%5` are never
+written and stay paired. The invariant was real; my statement of it was wrong.
+The check now covers only the pair no phase writes, `tests/test_milestone_gate.py`
+pins that reasoning, and the ramp witness was moved off register 2 for the same
+reason.
+
+### M7 — adversarial input handled as the device would, known-good after
+
+**8 of 8 classes, four distinct exception codes, 7 of the 8 predicted from an
+upstream spec.**
+
+| class | frame | predicted | source |
+|---|---|---|---|
+| `illegal_function` | FC `0x41` | exception `0x01` | MODBUS v1.1b — 0x41 is user-defined; this slave implements FC 3/6/8 |
+| `illegal_read_address` | `FC03 7,1` | exception `0x02` | MODBUS v1.1b — the map is registers 2..6 |
+| `illegal_write_address` | `FC06 0,<rand>` | exception `0x02` | MODBUS v1.1b — register 0 is below the map |
+| `zero_quantity` | `FC03 2,0` | exception `0x03` | MODBUS v1.1b — quantity must be 1..125 |
+| `quantity_over_125` | `FC03 2,126` | exception `0x03` | MODBUS v1.1b — 126 exceeds the maximum |
+| `truncated_pdu` | `03 00` | exception `0x02` | a 2-byte FC03 PDU cannot carry an address and a quantity |
+| `mbap_length_short` | MBAP length `2`, 6-byte PDU | exception `0x03` | TCP/IP guide v1.0b — the length field counts unit id + PDU |
+| `mbap_protocol_id_nonzero` | MBAP protocol id `0x0001` | exception `0x0A` | **firmware-recovered, NOT spec-predicted** — see below |
+
+**The honest caveat on the last row.** The TCP/IP implementation guide §4.1 says
+the protocol id MUST be `0x0000`, so the spec-derived prediction is only *"this
+frame must not be executed"* — which is asserted, and holds (register 6 is
+unchanged). The specific code this build answers with, `0x0A` GATEWAY PATH
+UNAVAILABLE, is **not** what the spec prescribes; it was recovered by probing
+this firmware and is therefore a **regression check, not a prediction**. It is
+labelled `source: "firmware-recovered"` in the result and a test pins that
+label, because a probe-derived constant presented as a spec prediction is
+Rule 1's circularity wearing a citation. The firmware also **echoes the bad
+protocol id back** in the response MBAP (`1111 0001 0003 01 86 0a`), which is
+itself guest-composed evidence.
+
+One predicate, applied identically to both arms: *the reply is an exception
+carrying the predicted code, AND register 6 is unchanged, AND a bare `FC03`
+answers afterwards.* Silence is **not** a rejection on this device — it answers
+exceptions — so a missing reply is its own outcome (`answered_at_all`) and is
+never folded into "refused".
+
+**The discriminator, and it is not a liveness poll.** MODBUS unit id `0` is the
+broadcast address and differs from an accepted write in **one byte**. This
+firmware answers **nothing** and still **applies** the write:
+
+```
+[m7_broadcast_discriminator] unit id 0 FC06 reg6=0x28DD -> SILENCE,
+                             reg6 0xC09F -> 0x28DD
+```
+
+One frame draws silence *and* changes the guest's state. That rules out "the
+seam is dead" and "the parser drops everything" at once, which a liveness poll
+cannot do — §1a evidence form 3, decided by a byte the guest emitted.
+
+**"…and known-good traffic still works afterwards"** is its own term, measured
+after all eight classes and the discriminator: a fresh random into register 6,
+echoed byte-exact, read back byte-exact, and a full five-register block read.
+
+### The two rung-specific knobs, both arms
+
+| arm | M4 | M6 | M7 | milestone | guard |
+|---|---|---|---|---|---|
+| default path (×3) | `landed:true` | **3/3** | **8/8** | `M7` | `M4-OK` |
+| `--m6-freeze` | `landed:true` | **0/3** | 8/8 | `M7` | `M4-OK` |
+| `--m7-wellformed` | `landed:true` | 3/3 | **0/8** | `M6` | `M4-OK` |
+| `--no-ladder` | `landed:true` | skipped | skipped | `M4` | `M4-OK` |
+| `HAL_SEAM_CONTROL=1` | `landed:false` | skipped | skipped | `M3` | `WALL-M3` |
+| firmware moved aside | `booted:false` | — | — | `M0` | `WALL-M0` |
+
+`--m6-freeze` sends the state-changing `FC06` with **MBAP protocol id 0x0001**
+instead of the mandatory `0x0000`, so **the firmware's own stack** refuses it
+and register 6 never moves — measured `reg6 0x0000 -> 0x0000` against a
+commanded `0x7EFC`, in all three rounds. The two bare read-backs are untouched
+and the predicate is unchanged, so the arm is scored by exactly the predicate
+under test (playbook w33.1). **M7 stays 8/8 and the milestone stays `M7`** —
+both M6's control and a running demonstration that this scorer does not chain
+M7 ← M6.
+
+`--m7-wellformed` sends each class's well-formed twin under the **same**
+predicate. All eight are answered normally rather than with an exception
+(`03024cf0`, `060006ddef`, `030a01b0fdf02100df00ddef`, …) and the write-shaped
+twin also moves the state witness (`reg6 0x4CF0 -> 0xDDEF`), so the phase scores
+**0/8, milestone falls to `M6`**, with M4 and M6 untouched. That is what shows
+the exceptions in the live arm were the firmware discriminating rather than a
+seam that refuses everything — one arm, both jobs.
+
+### What the new phases would have broken, and did not
+
+Per playbook w33.2, the pre-existing control was re-read against them.
+`HAL_SEAM_CONTROL=1`'s whole claim is that **no MODBUS PDU was ever sent**, and
+both phases send plenty. Both are therefore skipped whenever it is armed, and
+the run says so rather than measuring nothing quietly:
+
+```
+"ladder_skipped_reason": "HAL_SEAM_CONTROL=1 -- the M6/M7 phases transmit
+ MODBUS PDUs, which would contradict this control's claim that none were sent"
+```
+
+A defect inside the new phases is a **harness fault, not a device result**: it
+sets `harness_fault` and blanks the milestone to `null`, so the fleet guard
+scores a bare `WALL` and credits **no rung at all**, including the M4 the run
+already had (playbook w29.2/w37.3).
+
 
 ## What runs
 
@@ -195,6 +360,16 @@ python3 -c "import subprocess; from rehostry_utasker_modbus import spawn, paths;
   subprocess.run(spawn.spawn_argv(overlays=[paths.ETH_BRIDGE_OVERLAY]), \
                  cwd=spawn.spawn_cwd(), env=spawn.spawn_env())"      # + the frame bridge
 python3 tools/modbus_peer.py arp               # host peer: ARP (currently no reply)
+
+# THE INVOCATION THE CENSUS HEADER NAMES -- M1..M4, then M6 and M7 on the same
+# boot and the same TCP session (~34 s):
+python3 -m rehostry_utasker_modbus.attack
+
+# the two rung-specific falsification knobs, both arms
+python3 -m rehostry_utasker_modbus.attack --m6-freeze       # M6 3/3 -> 0/3, still M7
+python3 -m rehostry_utasker_modbus.attack --m7-wellformed   # M7 8/8 -> 0/8, drops to M6
+python3 -m rehostry_utasker_modbus.attack --no-ladder       # the M4-only run
+HAL_SEAM_CONTROL=1 python3 -m rehostry_utasker_modbus.attack   # the seam control -> M3
 ```
 
 Diagnostics: `HAL_UT_PROBE_TRACE=N`, `HAL_UT_WATCH=0xaddr,...`,
