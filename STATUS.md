@@ -537,3 +537,36 @@ guest reaches the fatal escalation later in wall-clock, and a slow enough guest
 lands before it — which is why a green run on this device *was* worth
 distrusting. That mode is now gone: the escalation no longer happens on this
 window at all.
+
+## 2026-09-08 (HAL_PY) — the fleet's stock "no emulator" arm was INERT here, and an inert control is worse than no control
+
+`spawn.spawn_argv` built its argv as `python or sys.executable` — **no env term anywhere in the chain**, so the fleet's stock control arm `HAL_PY=/usr/bin/false` — *"make sure no emulator ever exists"* — could not take effect on this device by any route at all. DEVICE-PLAYBOOK **w74**.
+
+The call sites on the evidence path (`spawn.py:25`) now pass
+`os.environ.get("HAL_PY") or sys.executable` — the repair
+`device-vesc-bldc-f405` found independently and `device-apc-nmc3-su` carries.
+
+Measured, **both arms, no boot**: `subprocess.Popen` is intercepted at the
+moment of the spawn, `argv[0]` is read and the call aborted
+(`scratch-batch-s0909-halpy/prove_halpy_arms.py`).
+
+| | `HAL_PY=/usr/bin/false` | `HAL_PY` unset |
+|---|---|---|
+| before | `/Users/user/Development/rehostry/.venv-dev/bin/python` — **INERT** | `/Users/user/Development/rehostry/.venv-dev/bin/python` |
+| after | `/usr/bin/false` — **REACHABLE** | `/Users/user/Development/rehostry/.venv-dev/bin/python` — **unchanged** |
+
+**The right-hand column is the whole argument.** With `HAL_PY` unset the
+expression *is* `sys.executable`, so no run that does not set it can behave
+differently from before: this can only ever make a control stronger, never a
+rung easier. **The milestone is untouched and the census header is unchanged.**
+
+The agreement control, run in the same process and the same environment on each
+arm — `spawn_argv()` called with no interpreter argument — returned
+`/usr/bin/false` on the set arm and `/Users/user/Development/rehostry/.venv-dev/bin/python` on the unset arm. Without it
+*"the arm did nothing"* and *"my experiment did nothing"* are the same output.
+
+**No recorded evidence on this device ever rested on `HAL_PY`.** STATUS.md,
+README.md and `docs/` were grepped: this device cites no `HAL_PY`-based control
+arm, so nothing here is re-scored and no claim is withdrawn. The trap was that
+the next agent to copy a sibling's stock arm would have got a control that
+passes while proving nothing.

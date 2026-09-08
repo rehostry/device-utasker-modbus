@@ -22,7 +22,11 @@ CORTEXM_CPU_MODEL = "UC_CPU_ARM_CORTEX_M4"
 
 def spawn_argv(python: Optional[str] = None, emulator: str = "unicorn",
                overlays: Optional[List[str]] = None) -> list:
-    argv = [python or sys.executable, "-m", "halucinator.main",
+    # `python or sys.executable` had NO env term at all, so the fleet's
+    # stock "no emulator ever exists" arm (HAL_PY=/usr/bin/false) could
+    # not take effect on this device by any route.  Unset, this is exactly
+    # sys.executable.  DEVICE-PLAYBOOK w74.3.
+    argv = [python or os.environ.get("HAL_PY") or sys.executable, "-m", "halucinator.main",
             "--emulator", emulator]
     for f in list(paths.CONFIG_FILES) + list(overlays or []):
         argv += ["-c", f]
