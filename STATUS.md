@@ -1,4 +1,4 @@
-<!-- rehostry-census: milestone=M7 landed=true verdict=M4-OK verified=2026-09-05 method=live-run note=M5-M8-undefined-single-interface -->
+<!-- rehostry-census: milestone=M7 landed=true verdict=M4-OK verified=2026-09-05 method=live-run note=M5-and-M8-EACH-DEFINED-and-UNMET-at-1-of-4-CORRECTED-2026-09-08-from-undefined-single-interface-against-the-firmware-s-OWN-serial-menu(FTP-WEB-TELNET-beside-MODBUS);the-ARP-ICMP-substrate-disposal-STANDS -->
 <!-- Copyright 2026 Christopher Wright; SPDX-License-Identifier: AGPL-3.0-or-later -->
 # STATUS — uTasker MODBUS slave (STM32F4 / ARMv7E-M) rehost
 
@@ -9,7 +9,11 @@ boot and the same TCP session** the rehost is also **M6 (stateful)** and **M7
 (adversarial-input tolerance)**, each graded off M4 rather than off the other.
 
 **M5 and M8 are UNDEFINED here, not failed.** One link, one application service
-on it (MODBUS/TCP on :502), one peer. RULES §1a excludes two function codes over
+on it (MODBUS/TCP on :502), one peer.
+
+> ⚠ **SUPERSEDED 2026-09-08 (lane INVAPPLY).** The firmware's **own serial configuration menu** declares an FTP server, a WEB server and a TELNET server beside MODBUS/TCP. **M5 and M8 are each DEFINED and UNMET at 1 of 4.** The ARP/ICMP disposal below is correct and stands.
+> See *M5/M8 INTERFACE INVENTORY* at the end of this file. **No rung moves.**
+ RULES §1a excludes two function codes over
 one framing layer as a second interface, and the ARP replies and the TCP
 handshake underneath are **stack-level reflexes** — substrate, by the
 2026-09-02 ruling — not a second interface, however genuinely the guest computes
@@ -570,3 +574,106 @@ README.md and `docs/` were grepped: this device cites no `HAL_PY`-based control
 arm, so nothing here is re-scored and no claim is withdrawn. The trap was that
 the next agent to copy a sibling's stock arm would have got a control that
 passes while proving nothing.
+
+
+---
+
+## 2026-09-08 (lane INVAPPLY) — M5/M8 INTERFACE INVENTORY, applied from the audit
+
+**No milestone moved. Nothing was re-run. `milestone=` is untouched.** This
+section records an inventory and a `k of n`, not a rung.
+
+Source: `scratch-batch-s0907/M5-M8-INVENTORY-AUDIT.md`, which upheld RULES §1a's
+`duet3-tool1lc` reading (*"an unmodelled link with a real peer still counts"*)
+and §1b's separation of the two questions, and found three defects travelling
+with the argument: **one number published for both rungs**, `n` **wrong in both
+directions**, and `shared_substrate` **nulled where §1a requires it stated**.
+
+⚠ **M5 and M8 take DIFFERENT denominators (§1b).** M5 asks about
+**independence**; M8 asks about **coverage of what the image declares**. A
+declaration is M8's currency. For M5 the declarations are collapsed wherever
+two are **transports of one application** (§1a's solo1 ruling).
+
+⚠ **The inventory is of the FIRMWARE UNDER TEST, not the product** (RULES §1d,
+2026-09-08). The test is: *would this firmware, running, ever serve that
+interface?*
+
+**Method.** Byte census over **every image this row loads**
+(`scratch-batch-s0907/laneINVAPPLY/census/`), not `grep` — w74 records `grep` in
+this shell as a function returning a **silent false zero** on any NUL-containing
+file, which is every image here. Each run prints `files_examined` (w85: *a check
+whose input is empty passes*) and carries a negative control (`ZZ_NEG_zzq` = 0
+on every image) and a **context-checked** positive control. ⚠ The audit's own
+part-number control was a **false positive** — `24C` matched hex digits in a key
+blob — so every control below was read in context before it was believed.
+**ELF symbol tables are excluded as an inventory source** (`robot` scored
+`CAN = 5991`).
+
+### The image this row loads
+
+```
+  uTaskerMODBUS.bin  (90,185 bytes) -- the only image the config loads.
+  files_examined = 1;  negative control ZZ_NEG_zzq = 0;
+  positive control "WEB server" = 4, context-checked at 0x109cc.
+```
+
+### The firmware's own serial configuration menu, verbatim in that image
+
+```
+  @0x109cc:  ...Terminal menu login. FTP server. WEB server.
+             WEB server authentication. TELNET server.  Telnet port...
+  @0x15e88:  set_telnet
+  @0x159e9:  Show Ethernet statistics
+```
+
+Rule 1 names *"the firmware's own published menu"* as a valid inventory source,
+and this is one, in the image's own bytes. It does not shrink when this rehost
+implements less.
+
+### The inventory — M5 and M8 both **DEFINED and UNMET at 1 of 4**
+
+```python
+INTERFACE_INVENTORY = {
+  "derivation": "the firmware's own serial configuration menu, verbatim in "
+                "uTaskerMODBUS.bin",
+  "declared_services": [            # M8 currency (§1b).  n = 4.
+    "MODBUS/TCP :502  -- GRADED, AT M4  (MODBUS x2, uTaskerMODBUS.bin)",
+    "FTP server       -- 'FTP server' x2, uTaskerMODBUS.bin",
+    "WEB server       -- 'WEB server' x4 + 'WEB server authentication'",
+    "TELNET server    -- 'TELNET server' + 'Telnet port' + set_telnet @0x15e88",
+  ],
+  "m8": "DEFINED and UNMET at 1 of 4",
+  "m5": "DEFINED and UNMET at 1 of 4",
+  "shared_substrate": "all four share the one Ethernet MAC and uTasker's "
+                      "TCP/IP stack -- §1a's shared-substrate ruling says that "
+                      "is NOT a disqualifier (the adam6000 / harmony-ph6x12 "
+                      "shape).",
+  "not_interfaces": [
+    "ARP / ICMP -- the image's own 'Rx ICMP' x2 and ARP counters are "
+    "SUBSTRATE (§1a's stack-level-reflex ruling), however genuinely the guest "
+    "computes them.  The row's existing text already disposes of these "
+    "correctly and that disposal STANDS.",
+  ],
+}
+```
+
+**Why M5 and M8 agree at 4 here, without fusing them.** MODBUS/TCP, FTP and
+HTTP are three distinct applications on three distinct well-known endpoints.
+The fourth, TELNET, carries the *terminal menu* — and the terminal menu is also
+reachable on the serial line, so telnet is arguably a **transport** of it. But
+the serial terminal menu is **not itself a separate entry in the declared list**,
+so collapsing telnet into it removes nothing from either denominator. The two
+numbers were computed separately and agree; they are not one variable.
+
+### What the row already had right, and keeps
+
+The superseded paragraph's disposal of ARP and the TCP handshake as **substrate**
+is correct and is untouched — §1a's substrate ruling excludes exactly *"ARP,
+ICMP echo"*. What fell is only *"one link, one application service on it"*: the
+image's own menu declares three more.
+
+**Not padded.** An entry is here only if §1a would count it. Anything I could
+not source to this row's own image is recorded as **disputed**, with the
+reason, rather than silently included or excluded — padding `n` makes M8
+unreachable for bookkeeping reasons, which is the failure this section exists
+to avoid.
