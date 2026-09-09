@@ -623,17 +623,44 @@ def run_m7(sess, stage: Callable, rng, wellformed: bool = False
     return out
 
 
-#: M5 and M8 are UNDEFINED on this rehost, not failed: one link (the modelled
-#: Ethernet MAC + uTasker's own IP stack), one application service on it
-#: (MODBUS/TCP on :502), one peer.  RULES §1a excludes two function codes over
-#: one framing layer as a second interface, and the ARP and TCP work the stack
-#: does underneath is SUBSTRATE by the 2026-09-02 stack-level-reflex ruling.
-#: The 2026-09-02 ruling that M6/M7 do not require M5 is what makes those rungs
-#: claimable here on their own evidence.
-M5_M8_STATUS = ("UNDEFINED: one link, one application service (MODBUS/TCP on "
-                ":502), one peer. ARP and the TCP handshake are stack-level "
-                "reflexes and are SUBSTRATE, not a second interface (RULES "
-                "§1a, 2026-09-02). M6/M7 do not require M5 (same ruling).")
+#: M5 and M8 are each DEFINED and UNMET at 1 of 4 on this rehost.
+#:
+#: ⚠ This string said "UNDEFINED: one link, one application service" until
+#: 2026-09-08.  That reading was refuted by the firmware's OWN serial
+#: configuration menu, which is verbatim in `uTaskerMODBUS.bin` at 0x109cc --
+#: *"Terminal menu login. FTP server. WEB server. WEB server authentication.
+#: TELNET server. Telnet port"* -- plus `set_telnet` at 0x15e88.  RULES Rule 1
+#: names *"the firmware's own published menu"* as a valid inventory source, and
+#: that menu does not shrink when this rehost implements less.  Four declared
+#: services: MODBUS/TCP :502 (graded, at M4), FTP, WEB and TELNET.  M5 and M8
+#: take DIFFERENT denominators (RULES §1b) and were computed separately; they
+#: agree at 4 here, which is a coincidence of this image and not one number
+#: serving both rungs.  See STATUS.md's *M5/M8 INTERFACE INVENTORY* section and
+#: `scratch-batch-s0907/M5-M8-INVENTORY-AUDIT.md`.
+#:
+#: ⭐ The header was corrected on 2026-09-08 and this constant was NOT, so for
+#: one day every live run printed `UNDEFINED` while `STATUS.md` line 1 said
+#: `DEFINED-and-UNMET-at-1-of-4`.  A header corrected without its code is a
+#: correction no run reproduces (playbook w120.6).  `tests/test_m5_m8_status.py`
+#: now couples the two so the pair cannot drift again.
+#:
+#: The ARP/ICMP and TCP-handshake disposal is UNCHANGED and still correct: they
+#: are stack-level reflexes and SUBSTRATE by the 2026-09-02 ruling, however
+#: genuinely the guest computes them.  So is the 2026-09-02 ruling that M6/M7
+#: do not require M5, which is what makes those rungs claimable here.
+#:
+#: ⚠ This is BOOKKEEPING, not a rung.  `_extend_milestone` never reads this
+#: string, and no milestone moves when it changes.
+M5_M8_STATUS = ("DEFINED and UNMET at 1 of 4: the firmware's own serial "
+                "configuration menu (verbatim in uTaskerMODBUS.bin at 0x109cc, "
+                "plus set_telnet at 0x15e88) declares FOUR services -- "
+                "MODBUS/TCP :502 (graded, at M4), FTP server, WEB server, "
+                "TELNET server. RULES Rule 1 names the firmware's own published "
+                "menu as a valid inventory source. M5 and M8 take different "
+                "denominators (RULES §1b) and were computed separately; both "
+                "come to 1 of 4. ARP and the TCP handshake remain SUBSTRATE, "
+                "not a second interface (RULES §1a, 2026-09-02) -- that "
+                "disposal stands. M6/M7 do not require M5 (same ruling).")
 
 
 def _extend_milestone(result: Dict[str, Any]) -> Dict[str, Any]:

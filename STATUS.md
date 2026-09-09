@@ -677,3 +677,35 @@ not source to this row's own image is recorded as **disputed**, with the
 reason, rather than silently included or excluded — padding `n` makes M8
 unreachable for bookkeeping reasons, which is the failure this section exists
 to avoid.
+
+## 2026-09-08 (lane `s0907-laneEXP2`) — THE CODE NOW PRINTS WHAT THE HEADER CLAIMS
+
+**Bookkeeping. No milestone moved, `landed` did not move, `booted` did not
+move; the census header is untouched.** Live before and after: `booted:true
+landed:true milestone:"M7"`.
+
+The M5/M8 inventory above was applied on 2026-09-08 and corrected line 1 of
+this file to `M5-and-M8-EACH-DEFINED-and-UNMET-at-1-of-4`. It did not touch
+`attack.py`, so for a day every live run printed
+
+```
+  "m5_m8_status": "UNDEFINED: one link, one application service (MODBUS/TCP on :502), one peer..."
+```
+
+while the header said the opposite. ⚠ **A header corrected without its code is
+a correction that no run reproduces** (playbook w120.6, which reported this and
+correctly declined to fix it as out of its scope).
+
+`M5_M8_STATUS` now states the corrected inventory — four declared services from
+the firmware's own serial configuration menu at 0x109cc, the two denominators
+computed separately, and the ARP/TCP substrate disposal **unchanged and still
+stated**, because that half was always right. `tests/test_m5_m8_status.py`
+couples the header and the constant so the pair cannot drift again, and asserts
+that the string decides no rung.
+
+Tests **15 → 25**, **6 of 6** deliberate size-changing breaks caught with the
+test count unchanged on every one. Two of those six were caught only after
+adding the tests they exposed as missing: one that the sentence *"not a second
+interface"* survives verbatim (deleting `not` inverts the claim and every
+keyword check still passed), and one that a **run** puts the whole string in
+its result dict rather than the constant merely existing.
