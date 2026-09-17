@@ -1,4 +1,4 @@
-<!-- rehostry-census: milestone=M7 landed=true verdict=M4-OK verified=2026-09-05 method=live-run note=M5-and-M8-EACH-DEFINED-and-UNMET-at-1-of-4-CORRECTED-2026-09-08-from-undefined-single-interface-against-the-firmware-s-OWN-serial-menu(FTP-WEB-TELNET-beside-MODBUS);the-ARP-ICMP-substrate-disposal-STANDS -->
+<!-- rehostry-census: milestone=M7 landed=true verdict=M4-OK verified=2026-09-17 method=live-run note=M5-and-M8-EACH-DEFINED-and-UNMET-at-1-of-2-CORRECTED-2026-09-17-from-1-of-4;the-2026-09-08-reading-took-uTasker-s-GENERIC-debug-c-COMMAND-TABLE-for-a-service-manifest-and-the-SAME-table-in-the-SAME-image-also-offers-Go-to-USB-menu-Go-to-I2C-menu-CAN-commands-and-Go-to-utFAT-disk-interface-on-a-build-that-implements-NONE-of-them;WEB-and-FTP-have-ZERO-implementing-strings-in-this-image-and-TELNET-was-settled-LIVE-(the-firmware-s-OWN-stack-SYN-ACKs-502-first-middle-and-last-and-RST-ACKs-20-21-22-23-25-69-80-161-443-503-992-2323-4444-8000-8080;a-1040-port-one-boot-sweep-found-EXACTLY-ONE-listener-502);n-MOVED-IN-BOTH-DIRECTIONS-because-uTasker-s-OWN-SERIAL-COMMAND-CONSOLE-was-ADDED-(banner-uTasker-MODBUS-slave-at-0x0801552a-a-link-with-a-peer-this-rehost-does-NOT-drive-the-duet3-tool1lc-shape);the-ARP-ICMP-substrate-disposal-STANDS-and-the-RST-ACKs-are-that-SAME-substrate-used-as-evidence-ABOUT-the-inventory;M4-M6-M7-UNCHANGED-and-RE-RUN-2026-09-17 -->
 <!-- Copyright 2026 Christopher Wright; SPDX-License-Identifier: AGPL-3.0-or-later -->
 # STATUS — uTasker MODBUS slave (STM32F4 / ARMv7E-M) rehost
 
@@ -630,6 +630,11 @@ Rule 1 names *"the firmware's own published menu"* as a valid inventory source,
 and this is one, in the image's own bytes. It does not shrink when this rehost
 implements less.
 
+> ⚠ **SUPERSEDED 2026-09-17 (lane `s0907-laneM5`) — see *M5/M8 RE-DERIVED,
+> 1 of 2* at the end of this file.** The block below is kept verbatim so the
+> correction can be checked against what it corrected. Nothing in it was
+> deleted.
+
 ### The inventory — M5 and M8 both **DEFINED and UNMET at 1 of 4**
 
 ```python
@@ -709,3 +714,230 @@ adding the tests they exposed as missing: one that the sentence *"not a second
 interface"* survives verbatim (deleting `not` inverts the claim and every
 keyword check still passed), and one that a **run** puts the whole string in
 its result dict rather than the constant merely existing.
+
+
+## 2026-09-17 (lane `s0907-laneM5`) — M5/M8 RE-DERIVED: **1 of 2**, and `n` moved in BOTH directions
+
+**No rung moved.** `milestone` is still `M7`, `landed` is still `true`,
+`booted` is still `true`, and M4/M6/M7 were **re-run live on 2026-09-17** rather
+than quoted. What changed is the inventory, and it changed because the
+2026-09-08 derivation was reading the wrong kind of table.
+
+### What the `1 of 4` reading got wrong
+
+It took this block for a manifest of services:
+
+```
+  0x08015990  [enable/disable] FTP server        0x08015f40  set_ftp
+  0x080159ac  [enable/disable] WEB server        0x08015f48  set_web
+  0x080157e4  [enable/disable] Telnet service    0x08015e84  set_telnet
+  0x08010a04  "   Telnet port number = "
+```
+
+⚠ **The same table, in the same image, also offers:**
+
+```
+  0x08015cd2  Go to USB menu          0x0801587e  Go to utFAT disk interface
+  0x08015ce2  Go to I2C menu          0x08015cec  CAN commands
+```
+
+on an STM32F429 MODBUS demo that implements **none** of the four. Censused
+across the whole image, each of `USB`, `I2C`, `CAN` and `utFAT` occurs **only
+inside that menu table and nowhere else** — no descriptors, no FAT layer, no
+bus driver strings. **It is uTasker's generic `debug.c` command list: what the
+console can PRINT, not what the firmware SERVES.** That is playbook w92.2's
+lesson ("a vendor's debug-module list is not a capability manifest") arriving at
+a different vendor, and it is what RULES §1d exists to catch — *"would this
+firmware, running, ever serve that interface?"*
+
+### The three entries that came OUT, each with its evidence
+
+Byte census over `uTaskerMODBUS.bin` (90,185 B, the only image this row loads),
+in Python — **not `grep`**, which in this shell is a function returning a silent
+false zero on any NUL-containing file (w74). Negative control
+`ZZ_NEG_zzq_not_present` = 0. Positive controls read **in context** before being
+believed (the audit's own `24C` control was a false positive on hex digits).
+
+| candidate | tokens censused | hits |
+|---|---|---|
+| **WEB server** | `HTTP` `200 OK` `Content-` `Connection:` `Server:` `text/` `.htm` `404` | **0, all eight** |
+| **FTP server** | `220 ` `230 ` `530 ` `150 ` `226 ` `257 ` `RETR` `STOR` `LIST` `PASV` `PORT ` `Service ready` | **0, all twelve** |
+| **TELNET server** | settled **live**, below | — |
+
+### TELNET was settled LIVE, and the firmware answered for itself
+
+One boot, one bridge, SYNs sent one at a time with an 8 s collection window, to
+the firmware's own uNetwork stack:
+
+```
+  :502  502_pos_control_1   -> SYN-ACK      (seq 0)
+  :20   :21   :22   :25   :69   :80   :161  :443  :503  :992
+  :2323 :4444 :8000 :8080                   -> RST-ACK, EVERY ONE
+  :23   telnet                              -> RST-ACK
+  :4444 negative control                    -> RST-ACK  (the same refusal)
+  :502  502_pos_control_1 (mid-probe)       -> SYN-ACK  (seq 12500)
+  :502  502_pos_control_2 (last)            -> SYN-ACK  (seq 25000)
+```
+
+Three things make this evidence rather than an observation:
+
+* **The guest composed every reply.** The RST-ACK acknowledgement numbers
+  advance monotonically **59194 → 59211** across the seventeen probes, and the
+  three SYN-ACK initial sequence numbers step **0 → 12500 → 25000** on the
+  firmware's own ISN generator. Neither counter exists on the host side.
+* **:4444 is the negative control** — a port nothing could plausibly claim — and
+  :23, :80 and :21 draw **exactly the same refusal** it does.
+* **:502 is the liveness control and it was run FIRST, MIDDLE and LAST.** Without
+  it a refusal cannot be told from a stack that died mid-probe, which is the
+  whole difficulty with reading a negative.
+
+A separate one-boot sweep of **1040 ports** (1..1024 plus 16 common high ports)
+produced **exactly one SYN-ACK: :502**, with the liveness control answering in
+both the first and the last batch.
+
+⚠ **I refuted my own sweep's weaker half and am not quoting it as more than it
+is.** 849 of those 1040 ports produced **no reply at all** rather than a RST —
+and **:502 itself was one of them** in its own natural batch, because 16 SYNs
+per batch outruns the bridge's one-frame-per-scheduler-pass injection rate. **A
+silence in that sweep is a throughput artifact, not a refusal.** Only the 191
+RSTs and the SYN-ACKs are informative, which is why the seventeen ports that
+matter were re-probed **one at a time** in the table above.
+
+### The entry that went IN — and it was hiding in plain sight
+
+The menu the previous reading was quoting **is itself the published interface of
+uTasker's serial command console**:
+
+```
+  0x0801552a  "uTasker-MODBUS-slave  "      the banner
+  0x080154b3  "  uTasker&STM32"
+  0x080154ad  "ADMIN"
+  0x08012eb4  "Command line blocked"
+  0x08015b68  "Leave command mode"
+```
+
+A link (the UART) with a peer (an operator's terminal) exchanging structured
+messages, declared by the firmware's own bytes. §1a's `duet3-tool1lc` ruling
+counts exactly that — *"an unmodelled link with a real peer still counts"* — and
+**this rehost does not drive it**. The previous reading counted the menu's
+**contents** and walked past the menu's **own** interface.
+
+### The inventory
+
+```python
+# M8's currency is DECLARATIONS (§1b) -- of the IMAGE UNDER TEST (§1d).
+M8_DECLARED_INTERFACES = [
+    "MODBUS/TCP :502 -- GRADED, AT M4 (port 0x01f6 in cMODBUS_default "
+    "@0x08015540; fnMODBUSListener 0x08012738)",
+    "uTasker serial command console -- banner 'uTasker-MODBUS-slave  ' "
+    "@0x0801552a, 'ADMIN' @0x080154ad, 'Command line blocked' @0x08012eb4; "
+    "NOT driven by this rehost",
+]
+
+# M5's currency is §1a-INDEPENDENT interfaces -- a DIFFERENT expression over a
+# DIFFERENT list object.
+M5_INDEPENDENT_INTERFACES = [
+    "MODBUS/TCP :502 application service -- own transport endpoint, own "
+    "application logic (fnHandleMODBUS_input)",
+    "uTasker command console on the serial line -- own transport endpoint "
+    "(the UART), own application logic (the command interpreter)",
+]
+
+assert M5_INDEPENDENT_INTERFACES is not M8_DECLARED_INTERFACES
+```
+
+**M5 = DEFINED and UNMET at 1 of 2. M8 = DEFINED and UNMET at 1 of 2.**
+
+⚠ **The invariant here is NOT `m5_n != m8_n`.** w92.1's defect is **one
+VARIABLE, not one VALUE** — `duet3-mb6hc` is legitimately M5 = M8 = 6 from two
+expressions. Nothing collapses on this row either, so the two agree, and what is
+asserted is that they are not the same object. Both arms, 2026-09-17:
+
+```
+  ARM A (as shipped):  m5 = DEFINED and UNMET at 1 of 2
+                       m8 = DEFINED and UNMET at 1 of 2   distinct objects: True
+  ARM B (re-fused, `M5_INDEPENDENT_INTERFACES = M8_DECLARED_INTERFACES`):
+                       AssertionError: M5 (independence, RULES §1a) and M8
+                       (coverage, RULES §1b) must be computed from two SEPARATE
+                       expressions over two SEPARATE lists...
+```
+
+### `shared_substrate`, stated — and on this row it really is nothing
+
+**The two entries share nothing below uTasker's cooperative scheduler.**
+MODBUS/TCP :502 runs over the Ethernet MAC and uTasker's TCP/IP stack; the
+command console runs over the UART. They share the scheduler, and the scheduler
+is named here so a reader applying a stricter rule can weigh it. (§1a's
+shared-substrate ruling requires this field be **stated**; a previous lane on
+the APC family set it to `None` and that was simply false *there*. It is stated
+here, with its reason, rather than nulled.)
+
+### What I refused to count, and why
+
+* **ARP / ICMP, the TCP handshake, and the RST-ACKs themselves** — substrate
+  (§1a's stack-level-reflex ruling). The RSTs are **evidence about** the
+  inventory, never an entry in it. The row's existing disposal stands unchanged.
+* **WEB / FTP** — menu labels with no implementing code (§1d).
+* **TELNET** — no listener anywhere in 1..1024, and in any case a *transport* of
+  the console application, which §1a's solo1 ruling collapses.
+* **USB / I²C / CAN / utFAT** — tokens that occur only inside the menu table.
+* **Registers 2..5 ramping on their own** — the firmware's own state, not a
+  peer.
+
+### ⚠ DISPUTED — recorded, not silently excluded
+
+**TELNET.** `set_telnet` @0x08015e84 and `   Telnet port number = ` @0x08010a04
+are a **config key whose value is a TCP port number**, which is a firmware-side
+statement that the service has its own transport endpoint. A reader who weighs
+that above the live refusal — on the theory that the server is compiled in but
+gated behind a saved parameter this boot leaves clear — gets **M8 1 of 3**. I
+exclude it, because no port in 1..1024 answered and because the same table's
+USB/I²C/CAN/utFAT entries are demonstrably not in this build. The evidence is
+written down so that number can be re-derived rather than argued about.
+
+### The ladder, enumerated — and there is no M5 branch, correctly
+
+`ast` over `attack.py`: the milestone values **written** are exactly
+`{None, "M0", "M3", "M4", "M6", "M7"}`, and every one is **printable** by a
+documented invocation (firmware moved aside → `M0`; `HAL_SEAM_CONTROL=1` → `M3`;
+`--no-ladder` → `M4`; `--m7-wellformed` → `M6`; default → `M7`; a harness fault →
+`None`). `"M5"` does not occur in the module in any form. **WRITTEN ==
+PRINTABLE**, and the gate cannot print a rung no phase of this run measures —
+which is the correct shape for a row whose M5 is *defined and unmet*, not for
+one that is being quietly capped. `_extend_milestone` is pure (`bool` and
+`result.get` only, no `try`), reads `M5_M8_STATUS` exactly once — to **write** it
+into the result — and no `if` in it tests that name.
+
+**NEW `M4-OK` credits created by this correction: 0.** Nothing here is a rung.
+
+### The live re-run behind `verified=2026-09-17`, with BOTH arms of every control
+
+Eight arms, this session. **Load is reported per run, never averaged** — the box
+is shared. Every row scored by **importing**
+`scratch-census-guard-a48/census_score.py`
+(sha256 `56cd3ab36c942ff1141dd8a24dfa6a09a813080ed8c69d50950869db592f13cc`),
+never a fork.
+
+| arm | load at launch | booted | landed | milestone | guard | M6 | M7 |
+|---|---|---|---|---|---|---|---|
+| default #1 | 3.74 | true | true | **M7** | `M4-OK` | 3/3 | 8/8 |
+| default #2 | 5.67 | true | true | **M7** | `M4-OK` | 3/3 | 8/8 |
+| default #3 | 5.56 | true | true | **M7** | `M4-OK` | 3/3 | 8/8 |
+| `--m6-freeze` | 6.76 | true | true | M7 | `M4-OK` | **0/3** | 8/8 |
+| `--m7-wellformed` | 6.61 | true | true | **M6** | `M4-OK` | 3/3 | **0/8** |
+| `--no-ladder` | 5.99 | true | true | **M4** | `M4-OK` | — | — |
+| `HAL_SEAM_CONTROL=1` | 5.57 | true | **false** | M3 | **`WALL-M3`** | — | — |
+| `HAL_PY=/usr/bin/false` | 5.81 | **false** | false | M0 | **`WALL-M0`** | — | — |
+
+**N-of-N, not `>= 1`:** the default path is **3 of 3** runs at `M7`, each with
+M6 3/3 and M7 8/8 — `passed == rounds` in every phase of every run. The six
+milestone values the ladder can write are the six these eight arms printed, so
+**WRITTEN == PRINTABLE** is demonstrated by runs and not only by `ast`.
+
+**NEW `M4-OK` credits created by this session: 0.** The row was already
+`M4-OK`/M7 and still is. Nothing in this correction is a rung.
+
+**Core worktrees: unmodified.** This row runs against the installed
+`halucinator@dev` core through its own venv; `spawn.py` deliberately strips
+`HALUCINATOR_SRC` and `PYTHONPATH` so no out-of-tree core can shadow it. I
+state this rather than patch it (RULES §2a).

@@ -623,44 +623,172 @@ def run_m7(sess, stage: Callable, rng, wellformed: bool = False
     return out
 
 
-#: M5 and M8 are each DEFINED and UNMET at 1 of 4 on this rehost.
+#: ---------------------------------------------------------------------------
+#: M5 and M8 on this rehost: each **DEFINED and UNMET at 1 of 2**.
+#: CORRECTED 2026-09-17 (lane `s0907-laneM5`) from `1 of 4`.  ⚠ `n` MOVED IN
+#: BOTH DIRECTIONS: three entries came OUT and one went IN.
 #:
-#: ⚠ This string said "UNDEFINED: one link, one application service" until
-#: 2026-09-08.  That reading was refuted by the firmware's OWN serial
-#: configuration menu, which is verbatim in `uTaskerMODBUS.bin` at 0x109cc --
-#: *"Terminal menu login. FTP server. WEB server. WEB server authentication.
-#: TELNET server. Telnet port"* -- plus `set_telnet` at 0x15e88.  RULES Rule 1
-#: names *"the firmware's own published menu"* as a valid inventory source, and
-#: that menu does not shrink when this rehost implements less.  Four declared
-#: services: MODBUS/TCP :502 (graded, at M4), FTP, WEB and TELNET.  M5 and M8
-#: take DIFFERENT denominators (RULES §1b) and were computed separately; they
-#: agree at 4 here, which is a coincidence of this image and not one number
-#: serving both rungs.  See STATUS.md's *M5/M8 INTERFACE INVENTORY* section and
-#: `scratch-batch-s0907/M5-M8-INVENTORY-AUDIT.md`.
+#: ⚠ WHAT THE 2026-09-08 READING GOT WRONG.  It took the block at 0x080159xx --
+#: `[enable/disable] FTP server`, `[enable/disable] WEB server`,
+#: `[enable/disable] Telnet service`, `set_ftp`, `set_web`, `set_telnet` -- as a
+#: manifest of services this image serves.  It is not.  It is uTasker's generic
+#: `debug.c` COMMAND TABLE, and **the same table in this same image also names
+#: `Go to USB menu` (0x08015cd2), `Go to I2C menu` (0x08015ce2), `CAN commands`
+#: (0x08015cec) and `Go to utFAT disk interface` (0x0801587e)** on an STM32F429
+#: MODBUS demo that implements none of them -- every one of those four tokens
+#: occurs ONLY inside the menu table and nowhere else in the image.  A command
+#: table is what the console can PRINT, not what the firmware SERVES (the
+#: playbook's w92.2 lesson, on a different vendor).
 #:
-#: ⭐ The header was corrected on 2026-09-08 and this constant was NOT, so for
-#: one day every live run printed `UNDEFINED` while `STATUS.md` line 1 said
-#: `DEFINED-and-UNMET-at-1-of-4`.  A header corrected without its code is a
-#: correction no run reproduces (playbook w120.6).  `tests/test_m5_m8_status.py`
-#: now couples the two so the pair cannot drift again.
+#: RULES §1d decides it, and it is the image itself that answers: *"would this
+#: firmware, running, ever serve that interface?"*
+#:
+#:   * **WEB server -- EXCLUDED.**  Byte census over `uTaskerMODBUS.bin`
+#:     (90,185 B, the only image this row loads): `HTTP` 0, `200 OK` 0,
+#:     `Content-` 0, `text/` 0, `.htm` 0, `Server:` 0, `Connection:` 0, `404` 0.
+#:     An HTTP server that emits no status line and no content type is not in
+#:     this image.
+#:   * **FTP server -- EXCLUDED.**  `220 ` 0, `230 ` 0, `530 ` 0, `150 ` 0,
+#:     `226 ` 0, `257 ` 0, `RETR` 0, `STOR` 0, `LIST` 0, `PASV` 0, `PORT ` 0.
+#:     uTasker's FTP server is a literal reply-code table; there is none here.
+#:   * **TELNET server -- EXCLUDED, and this one was settled LIVE.**  On one
+#:     boot, over the firmware's OWN uNetwork stack, every SYN below drew a
+#:     reply from the guest whose ACK counter advanced monotonically
+#:     (59194..59211 -- guest-side state, not ours):
+#:         :502 -> SYN-ACK   :20 :21 :22 :23 :25 :69 :80 :161 :443 :503 :992
+#:         :2323 :4444 :8000 :8080 -> **RST-ACK, every one**, the same refusal
+#:         :4444 draws, and :4444 is a port nothing could claim.
+#:         :502 was re-probed FIRST, MIDDLE and LAST and answered all three
+#:         times, so a refusal here means "no listener", not "the stack died".
+#:     A separate one-boot sweep of **1040 ports** (1..1024 + 16 common high
+#:     ports) produced **exactly one SYN-ACK: :502**.
+#:
+#: ⭐ AND ONE ENTRY THE OLD READING MISSED, in the other direction.  That menu
+#: is itself the published interface of **uTasker's serial command console** --
+#: banner `uTasker-MODBUS-slave  ` @0x0801552a, `  uTasker&STM32` @0x080154b3,
+#: `ADMIN` @0x080154ad, `Command line blocked` @0x08012eb4, `Leave command mode`
+#: @0x08015b68.  A link (the UART) with a peer (an operator's terminal)
+#: exchanging structured messages.  §1a's `duet3-tool1lc` ruling counts exactly
+#: that, modelled or not -- and this rehost does NOT drive it.  The previous
+#: reading counted the menu's CONTENTS and missed the menu's OWN interface.
+#:
+#: So the inventory of the firmware under test is TWO entries, and the rung is
+#: **M5 1 of 2** -- which is `moxa-nport-express`'s and `duet3-tool1lc`'s shape,
+#: not "undefined".
+#:
+#: ⚠ DISPUTED, recorded rather than silently excluded: a reader who holds that
+#: `set_telnet` + `   Telnet port number = ` (@0x08010a04) is a firmware-side
+#: statement of a transport endpoint, and that the server is merely gated behind
+#: a saved parameter this boot leaves clear, gets **M8 1 of 3**.  I exclude it
+#: because no port in 1..1024 answered and because the same table's USB/I2C/CAN/
+#: utFAT entries are demonstrably not in this build -- but the evidence is
+#: written here so that number can be re-derived.
 #:
 #: The ARP/ICMP and TCP-handshake disposal is UNCHANGED and still correct: they
 #: are stack-level reflexes and SUBSTRATE by the 2026-09-02 ruling, however
-#: genuinely the guest computes them.  So is the 2026-09-02 ruling that M6/M7
-#: do not require M5, which is what makes those rungs claimable here.
+#: genuinely the guest computes them -- and the RST-ACKs above are the same
+#: substrate answering, which is why a RST is evidence about the INVENTORY and
+#: is not itself a second interface.  So is the 2026-09-02 ruling that M6/M7 do
+#: not require M5, which is what makes those rungs claimable here.
 #:
-#: ⚠ This is BOOKKEEPING, not a rung.  `_extend_milestone` never reads this
-#: string, and no milestone moves when it changes.
-M5_M8_STATUS = ("DEFINED and UNMET at 1 of 4: the firmware's own serial "
-                "configuration menu (verbatim in uTaskerMODBUS.bin at 0x109cc, "
-                "plus set_telnet at 0x15e88) declares FOUR services -- "
-                "MODBUS/TCP :502 (graded, at M4), FTP server, WEB server, "
-                "TELNET server. RULES Rule 1 names the firmware's own published "
-                "menu as a valid inventory source. M5 and M8 take different "
-                "denominators (RULES §1b) and were computed separately; both "
-                "come to 1 of 4. ARP and the TCP handshake remain SUBSTRATE, "
-                "not a second interface (RULES §1a, 2026-09-02) -- that "
-                "disposal stands. M6/M7 do not require M5 (same ruling).")
+#: ⚠ This is BOOKKEEPING, not a rung.  `_extend_milestone` never reads any of
+#: it, and no milestone moves when it changes.
+
+#: M8's currency is DECLARATIONS (RULES §1b) -- of the IMAGE UNDER TEST (§1d).
+M8_DECLARED_INTERFACES = [
+    "MODBUS/TCP :502 -- GRADED, AT M4 (port 0x01f6 in cMODBUS_default "
+    "@0x08015540; fnMODBUSListener 0x08012738)",
+    "uTasker serial command console -- banner 'uTasker-MODBUS-slave  ' "
+    "@0x0801552a, 'ADMIN' @0x080154ad, 'Command line blocked' @0x08012eb4; "
+    "NOT driven by this rehost",
+]
+
+#: M5's currency is §1a-INDEPENDENT interfaces.  Derived by collapsing
+#: transports of one application out of the DECLARED list -- a DIFFERENT
+#: expression over a DIFFERENT list object.  ⚠ w92.1: the defect is one
+#: VARIABLE, not one VALUE.  These two legitimately come to the same number
+#: here because nothing collapses (the same way `duet3-mb6hc` is M5 = M8 = 6),
+#: so the invariant that can be asserted is that they are not the same object.
+M5_INDEPENDENT_INTERFACES = [
+    "MODBUS/TCP :502 application service -- own transport endpoint, own "
+    "application logic (fnHandleMODBUS_input)",
+    "uTasker command console on the serial line -- own transport endpoint "
+    "(the UART), own application logic (the command interpreter)",
+]
+
+assert M5_INDEPENDENT_INTERFACES is not M8_DECLARED_INTERFACES, (
+    "M5 (independence, RULES §1a) and M8 (coverage, RULES §1b) must be "
+    "computed from two SEPARATE expressions over two SEPARATE lists. They may "
+    "legitimately agree in value -- what they may never share is one variable.")
+
+M5_INVENTORY_SIZE = len(M5_INDEPENDENT_INTERFACES)
+M8_INVENTORY_SIZE = len(M8_DECLARED_INTERFACES)
+M5_AT_M4 = 1          # MODBUS/TCP :502
+M8_AT_M4 = 1          # same seam, counted under the other rung's currency
+
+INTERFACE_INVENTORY = {
+    "derivation": "the image's own bytes: the MODBUS listener port constant, "
+                  "the console banner/command table, and a LIVE enumeration of "
+                  "every TCP port the firmware's own stack will accept",
+    "declared_services": M8_DECLARED_INTERFACES,
+    "independent_interfaces": M5_INDEPENDENT_INTERFACES,
+    "m5": "DEFINED and UNMET at %d of %d" % (M5_AT_M4, M5_INVENTORY_SIZE),
+    "m8": "DEFINED and UNMET at %d of %d" % (M8_AT_M4, M8_INVENTORY_SIZE),
+    "shared_substrate": (
+        "NONE between the two entries. MODBUS/TCP :502 runs over the Ethernet "
+        "MAC and uTasker's TCP/IP stack; the command console runs over the "
+        "UART. They share the uTasker cooperative scheduler and nothing "
+        "below it. (§1a's shared-substrate ruling requires this field be "
+        "STATED -- a previous lane on another family set it to None and that "
+        "was simply false there. Here the answer really is 'nothing shared "
+        "below the scheduler', and the scheduler is named so a stricter "
+        "reader can weigh it.)"),
+    "not_interfaces": [
+        "ARP / ICMP -- the image's own 'Rx ARP'/'Rx ICMP' counters @0x08014da6 "
+        "are SUBSTRATE (§1a's stack-level-reflex ruling), however genuinely "
+        "the guest computes them. The row's existing disposal STANDS.",
+        "the TCP 3-way handshake, and the RST-ACK refusals that enumerate the "
+        "listener set -- the same substrate. They are EVIDENCE ABOUT the "
+        "inventory, not entries in it.",
+        "WEB server / FTP server -- menu labels with no implementing code in "
+        "this image, and the stack refuses :80/:443/:8000/:8080/:20/:21 "
+        "(RULES §1d).",
+        "TELNET server -- no listener on :23/:2323/:992, nor anywhere in "
+        "1..1024. Collapses into the console entry for M5 in any case (§1a's "
+        "solo1 ruling: a transport of one application).",
+        "'Go to USB menu' / 'Go to I2C menu' / 'CAN commands' / 'Go to utFAT "
+        "disk interface' -- each token occurs ONLY inside the menu table and "
+        "nowhere else in the image. This is what proves the table is a "
+        "command list, not a capability manifest.",
+    ],
+    "disputed": (
+        "TELNET. 'set_telnet' @0x08015e84 and '   Telnet port number = ' "
+        "@0x08010a04 are a port-number config key, which is a firmware-side "
+        "statement of a transport endpoint. A reader who weighs that above the "
+        "live refusal gets M8 1 of 3. Excluded here; re-derivable from this "
+        "block."),
+}
+
+M5_M8_STATUS = (
+    "DEFINED and UNMET at 1 of 2 (M5) and 1 of 2 (M8), computed separately. "
+    "CORRECTED 2026-09-17 from 1 of 4: that reading took uTasker's generic "
+    "debug.c COMMAND TABLE for a service manifest, and the same table in this "
+    "same image also offers 'Go to USB menu', 'Go to I2C menu', 'CAN commands' "
+    "and 'Go to utFAT disk interface' on a build that implements none of them. "
+    "RULES §1d asks whether this firmware, running, would ever serve the "
+    "interface. WEB: 0 hits on HTTP/200 OK/Content-/text//.htm. FTP: 0 hits on "
+    "220 /230 /530 /150 /226 /RETR/STOR/PASV. TELNET: settled LIVE -- on one "
+    "boot the firmware's own stack answered :502 with SYN-ACK first, middle "
+    "and last, and answered :20 :21 :22 :23 :25 :69 :80 :161 :443 :503 :992 "
+    ":2323 :4444 :8000 :8080 with RST-ACK, the same refusal it gives :4444; a "
+    "1040-port sweep found exactly one listener, :502. One entry was ADDED in "
+    "the other direction: uTasker's own serial command console (banner "
+    "'uTasker-MODBUS-slave  ' at 0x0801552a), a link with a peer that this "
+    "rehost does not drive -- §1a's duet3-tool1lc shape. ARP and the TCP "
+    "handshake remain SUBSTRATE, not a second interface (RULES §1a, "
+    "2026-09-02) -- that disposal stands, and the RST-ACKs are that same "
+    "substrate being used as evidence ABOUT the inventory. M6/M7 do not "
+    "require M5 (same ruling).")
 
 
 def _extend_milestone(result: Dict[str, Any]) -> Dict[str, Any]:
