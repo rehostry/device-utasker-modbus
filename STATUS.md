@@ -795,6 +795,27 @@ A separate one-boot sweep of **1040 ports** (1..1024 plus 16 common high ports)
 produced **exactly one SYN-ACK: :502**, with the liveness control answering in
 both the first and the last batch.
 
+**Could the refusals have been composed host-side? Searched, and no — with one
+hit disposed of rather than a clean zero claimed.** Every host-side artifact
+(22 files: all `src/**.py`, all `configs/*.yaml`, `tools/*.py` and the probe
+itself) was scanned for RST construction. The scan found **one** genuine
+host-side RST send, and it is not in the receive path:
+
+```
+  portprobe2.py:132   modbus.send(modbus.tcp(mac, dport, sport, seq + 1,
+                                             (sa["seq"] + 1) & 0xFFFFFFFF, 0x04))
+```
+
+That is the probe **tearing down a half-open connection**, it is **sent** rather
+than received, and it fires only inside `if syn_ack:` — so it runs on **:502
+alone**, which is precisely the port that did *not* answer with RST-ACK. Every
+other match is prose in this repo or an unrelated register offset (`0x04` as
+`PLLCFGR`, `ANAR`, a memory base). The classifier itself only ever reads
+`raw_flags` out of frames taken from the bridge's `from_fw.pcap`, which is the
+guest's transmit stream. **Positive control: the same search finds the host's
+own SYN construction at `portprobe2.py:104`, so it was capable of finding a
+send.**
+
 ⚠ **I refuted my own sweep's weaker half and am not quoting it as more than it
 is.** 849 of those 1040 ports produced **no reply at all** rather than a RST —
 and **:502 itself was one of them** in its own natural batch, because 16 SYNs
