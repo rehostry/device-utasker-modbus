@@ -13,10 +13,13 @@ uTasker MODBUS slave (STM32F4, ARMv7E-M)
         ▸ ARP ▸ TCP :502 ▸ fnHandleMODBUS_input ▸ MODBUS reply   [M4]
 ```
 
-> **Status: M4 reached, with a panel and attack.** The RTOS boots, schedules its tasks, brings the Ethernet
+> **Status: M7, with a panel and attack.** The RTOS boots, schedules its tasks, brings the Ethernet
 > MAC/PHY fully up, and answers a **real MODBUS/TCP request on :502** — ARP
 > resolve, TCP 3-way handshake, FC03 request, and the firmware's own MODBUS reply
-> (`000100000003018302`). Zero emulator faults. See [`STATUS.md`](STATUS.md).
+> (`000100000003018302`). Zero emulator faults. M6 and M7 are measured on top of
+> that round trip; **M5 and M8 are each defined and unmet at 1 of 2** — the
+> inventory is one interface, and the second entry is uTasker's own serial
+> command console, declared but not driven. See [`STATUS.md`](STATUS.md).
 
 ## What's real
 
