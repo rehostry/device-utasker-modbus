@@ -824,6 +824,28 @@ silence in that sweep is a throughput artifact, not a refusal.** Only the 191
 RSTs and the SYN-ACKs are informative, which is why the seventeen ports that
 matter were re-probed **one at a time** in the table above.
 
+### ⚠ THE LIMIT OF THIS TELL, and why this row survives it
+
+The tell — *"a declared service whose token appears only inside the menu table
+and nowhere else in the image is a vendor's generic menu, not this build's
+service"* — was swept read-only across the other rows whose denominators came
+from a configuration menu. **It fires on `apc-sumx` and `apc-rpdu2g-aos`**
+(`ConsoleSSHPort` and `ftpPort` are menu-only in their `*-app.bin`) **and it is
+WRONG there**: the sibling `*-aos.bin` that the same row loads carries
+`SSH-2.0`×6, `ssh-rsa`×10, `diffie-hellman`×2, `220 `×2, `230 `×1, `RETR`×2.
+Those services are real.
+
+**A "menu only" verdict computed on ONE image of a multi-image row is not a row
+verdict** — w68's trap (*"a census over a subset of a row's images is a census
+that manufactures negatives"*) in mirror image.
+
+**This row survives the tell because it loads exactly one image**
+(`uTaskerMODBUS.bin`, 90,185 B, `paths.FIRMWARE_BIN`, the only `file:` in
+`utasker_config.yaml`) **and that image contains no HTTP and no FTP code
+anywhere in it.** There is no sibling for the code to be hiding in. Applied to
+the five APC rows, three grblhal/flipper/rusefi rows and this one — **ten images,
+negative control 0 on every one — the tell changes `n` on this row alone.**
+
 ### The entry that went IN — and it was hiding in plain sight
 
 The menu the previous reading was quoting **is itself the published interface of
