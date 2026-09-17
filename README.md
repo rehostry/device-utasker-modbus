@@ -18,8 +18,9 @@ uTasker MODBUS slave (STM32F4, ARMv7E-M)
 > resolve, TCP 3-way handshake, FC03 request, and the firmware's own MODBUS reply
 > (`000100000003018302`). Zero emulator faults. M6 and M7 are measured on top of
 > that round trip; **M5 and M8 are each defined and unmet at 1 of 2** — the
-> inventory is one interface, and the second entry is uTasker's own serial
-> command console, declared but not driven. See [`STATUS.md`](STATUS.md).
+> inventory has **two** entries and exactly **one** of them reaches M4. The
+> second is uTasker's own serial command console, declared and not driven.
+> See [`STATUS.md`](STATUS.md).
 
 ## What's real
 
