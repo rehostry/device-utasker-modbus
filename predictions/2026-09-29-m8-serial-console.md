@@ -92,3 +92,46 @@ parity returns to **1 of 2**, while :502 is untouched. A knob that cannot move
 parity down is inert and proves nothing.
 
 *Refuted if* the console entry still passes with the ISR never called.
+
+## Part B addendum — the specifics, registered before the first graded arm
+
+Recon (four ungraded boots, 2026-09-29) settled where the console is and what it
+answers. **A1 was REFUTED**: `fnConfigSCI` opens **THREE** USART blocks, not one,
+and the console is on **USART3 (0x40004800)**, not USART1. A2 and A3 held. Two
+candidate *extra* entries therefore appeared, and B6 below is the test that
+decides them. Registered now, before any arm whose numbers I quote:
+
+**B2' — the console's own main menu is exactly these twelve tokens**
+`1 2 3 4 5 6 7 8 9 a help quit`, and its statistics sub-menu exactly these seven
+`up ipstat r_ipstat up_time memory help quit`, parsed out of the guest's bytes on
+**every round**. *Mismatch either way VOIDS parity* — it does not fail it, and it
+does not pass it.
+
+**B3' — the two VALUE witnesses, each with an invariant the firmware maintains.**
+`ipstat`: `Total Rx frames` equals the sum of the firmware's own nine
+per-protocol Rx counters and `Total Tx frames` the sum of its four Tx counters,
+both non-zero. `memory`: `Free heap = 0x.. from 0x..` with 0 < free < total.
+I predict **both invariants hold in all 3 rounds**. A transcript cannot satisfy
+them against a per-run frame count.
+
+*Refuted if* either sum disagrees, or the heap figures are absent or incoherent.
+
+**B6 — USART1 and USART2 are NOT inventory entries, and the test is a live one.**
+Both are opened by the firmware (`CR1.UE|TE|RE|RXNEIE`), so "a UART is open"
+would grow the denominator to 4. I predict a well-formed MODBUS-RTU FC03 with a
+correct CRC-16, delivered to each at slave addresses 1..8 and 0xff, draws
+**nothing**, while the console answers on the same boot and `up_time` advances —
+so the RTOS clock an RTU end-of-frame timer needs is running and the silence is
+the firmware's, not the model's.
+
+*Refuted if* either answers anything at all — in which case **the denominator
+GROWS to 3 or 4** and this attempt does not reach M8. I am registering that
+direction explicitly because it is the one that costs me the rung.
+
+**B7 — the parity numerator is computed from the run, not read from a constant.**
+The module used to carry `M5_AT_M4 = 1` and `M8_AT_M4 = 1`. Those are a false
+floor: a hard-coded numerator credits an interface in a run that never touched
+it. I predict that after the change, a run with the console phase skipped reports
+`1 of 2` because the entry was **not measured**, and the deaf arm reports `1 of 2`
+because it was **measured and failed** — two different reasons, never the same
+field.
