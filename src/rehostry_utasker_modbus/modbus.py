@@ -85,6 +85,33 @@ def send(frame: bytes) -> None:
     os.replace(tmp, os.path.join(INBOX, name))
 
 
+def frames_sent() -> int:
+    """How many Ethernet frames this host process has queued for the firmware.
+
+    Used only as CORROBORATION for the console's own `ipstat` counters -- the
+    guest's account of the other interface's traffic against ours. It gates no
+    rung.
+    """
+    return getattr(_seq, "n", 0)
+
+
+def count_tx_frames() -> int:
+    """How many frames the firmware has transmitted, counted off the spool."""
+    n = 0
+    try:
+        with open(TXLOG, "rb") as fh:
+            while True:
+                hdr = fh.read(2)
+                if len(hdr) < 2:
+                    return n
+                ln = (hdr[0] << 8) | hdr[1]
+                if len(fh.read(ln)) < ln:
+                    return n
+                n += 1
+    except OSError:
+        return n
+
+
 class TxReader:
     """Incremental reader over the bridge's append-only TX stream."""
 

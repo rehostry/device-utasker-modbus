@@ -9,6 +9,7 @@ PACKAGE = "rehostry_utasker_modbus"
 BASE_CONFIG = "utasker_config.yaml"
 ADDRS_CONFIG = "utasker_addrs.yaml"
 ETH_BRIDGE_OVERLAY = "eth_bridge_overlay.yaml"
+CONSOLE_OVERLAY = "console_overlay.yaml"
 PROBE_OVERLAY = "probe_overlay.yaml"
 FIRMWARE_BIN = "uTaskerMODBUS.bin"
 

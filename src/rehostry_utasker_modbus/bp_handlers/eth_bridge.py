@@ -44,6 +44,8 @@ from typing import Any, Optional, Tuple
 
 from halucinator.bp_handlers.bp_handler import BPHandler, bp_handler
 
+from . import serial_bridge
+
 log = logging.getLogger(__name__)
 
 FN_SIMULATE_ETHERNET_IN = 0x0800C77C   # (frame_ptr, length) -> lands frame in RX ring
@@ -161,6 +163,12 @@ class EthBridge(BPHandler):
         # fnSimulateEthernetIn periodically once its ETH driver is running, so use
         # that as the readiness signal and refuse to inject until it is seen.
         self.driver_up = False
+        # ---- the SECOND inventory entry: uTasker's own serial console -------
+        # It shares this object's borrowed-context machinery on purpose. Two
+        # independent borrowers would each keep their own `_busy` flag and could
+        # inject a call while the other's call was in flight, corrupting the
+        # saved context. One borrower, one `_busy`.
+        self.serial = serial_bridge.SerialBridge(self.spool)
 
     def register_handler(self, qemu: Any, addr: int, func_name: str, **kwargs: Any):
         return EthBridge.on_setup
@@ -323,11 +331,22 @@ class EthBridge(BPHandler):
                 # flight. Priority: (1) drain queued ticks so uTasker timers fire and
                 # the Ethernet/TCP task is rescheduled; (2) optional free-running
                 # tick fallback; (3) deliver one pending host frame.
-                if self._busy or self.saved is not None or not self.driver_up:
+                if self._busy or self.saved is not None:
                     return
                 # (a) deliver a pending host frame first (sets _busy if one was queued).
-                self._inject(uc_)
-                if self._busy:
+                if self.driver_up:
+                    self._inject(uc_)
+                    if self._busy:
+                        return
+                # (a2) one unit of serial-console work, if any is waiting. This is
+                # deliberately NOT gated on the ETH driver: the console is a
+                # different link. It injects only when the host has queued a byte
+                # or the firmware's own driver has left TXEIE set, so a run that
+                # never uses the console is byte-identical to one without it.
+                if self.serial.step(uc_, self._inject_call):
+                    self._inflight = "tty"
+                    return
+                if not self.driver_up:
                     return
                 # After the first served request the ETH/TCP task stops polling and
                 # its RTOS clock is frozen. Keep both alive via the firmware's own
@@ -352,6 +371,22 @@ class EthBridge(BPHandler):
             uc.hook_add(unicorn.UC_HOOK_CODE, _rx_entry,
                         begin=FN_SIMULATE_ETHERNET_IN, end=FN_SIMULATE_ETHERNET_IN)
             uc.hook_add(unicorn.UC_HOOK_CODE, _trap, begin=TRAP, end=TRAP)
+
+            # Evidence counters for the console seam: the firmware's OWN driver
+            # entries, hooked (never intercepted) so they are observed and not
+            # replaced.
+            def _sci_rx(uc_, address, size, ud):  # noqa: ANN001
+                self.serial.rx_hits += 1
+
+            def _sci_tx(uc_, address, size, ud):  # noqa: ANN001
+                self.serial.tx_hits += 1
+
+            uc.hook_add(unicorn.UC_HOOK_CODE, _sci_rx,
+                        begin=serial_bridge.FN_SCI_RX_BYTE,
+                        end=serial_bridge.FN_SCI_RX_BYTE)
+            uc.hook_add(unicorn.UC_HOOK_CODE, _sci_tx,
+                        begin=serial_bridge.FN_SCI_TX_BYTE,
+                        end=serial_bridge.FN_SCI_TX_BYTE)
             tick = int(os.environ.get("HAL_UT_ETH_TICK", str(TICK_PC)), 0)
             uc.hook_add(unicorn.UC_HOOK_CODE, _tick, begin=tick, end=tick)
             self.installed = True

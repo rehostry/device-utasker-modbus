@@ -1,0 +1,47 @@
+# Copyright 2026 Christopher Wright
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Model the STM32 USART register blocks so uTasker's OWN serial command console
+# -- the second entry in this row's M8 inventory -- has a wire to speak on.
+#
+# The base config maps 0x40000000..0x40023000 as ONE AutoPeripheral catch-all
+# (`soc_low`), which swallows every console byte.  HALucinator keys memory and
+# peripheral regions by NAME and a later config file overwrites an earlier one
+# (hal_config._parse_memory), so this overlay re-declares `soc_low` smaller and
+# fills the rest of that window back in, with two pages handed to
+# peripheral_models.stm32_usart.Stm32Usart:
+#
+#   0x40004000  USART2 @+0x400, USART3 @+0x800, UART4 @+0xc00
+#   0x40011000  USART1 @+0x000, USART6 @+0x400
+#
+# Everything else in the window keeps AutoPeripheral's behaviour, INCLUDING the
+# page at 0x40005000 -- UART5 shares it with I2C1/2/3, and this model's 0x400
+# sub-block semantics would mis-model an I2C block.  uTasker's own fnConfigSCI
+# (0x0800cac0) can only select USART1/USART2/USART3 on this image, so nothing the
+# console can use is left in the catch-all.
+peripherals:
+  soc_low:
+    base_addr: 0x40000000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x00004000            # 0x40000000..0x40004000
+  usart_234:
+    base_addr: 0x40004000
+    emulate: rehostry_utasker_modbus.peripheral_models.stm32_usart.Stm32Usart
+    permissions: rw-
+    size: 0x00001000            # USART2/USART3/UART4
+  soc_low_b:
+    base_addr: 0x40005000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x0000C000            # 0x40005000..0x40011000 (I2C, PWR, TIMs, ...)
+  usart_16:
+    base_addr: 0x40011000
+    emulate: rehostry_utasker_modbus.peripheral_models.stm32_usart.Stm32Usart
+    permissions: rw-
+    size: 0x00001000            # USART1/USART6
+  soc_low_c:
+    base_addr: 0x40012000
+    emulate: halucinator.peripheral_models.auto_model.AutoPeripheral
+    permissions: rw-
+    size: 0x00011000            # 0x40012000..0x40023000

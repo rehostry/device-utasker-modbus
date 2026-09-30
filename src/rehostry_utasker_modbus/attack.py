@@ -53,7 +53,7 @@ import tempfile
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from . import modbus, paths, spawn
+from . import console, modbus, paths, spawn
 
 # The slave's live holding registers, as probed (0/1 and >=7 are out of range).
 VALID_REGISTERS = (2, 3, 4, 5, 6)
@@ -694,13 +694,230 @@ def run_m7(sess, stage: Callable, rng, wellformed: bool = False
 #: ⚠ This is BOOKKEEPING, not a rung.  `_extend_milestone` never reads any of
 #: it, and no milestone moves when it changes.
 
+# ===========================================================================
+# THE SECOND INVENTORY ENTRY: uTasker's own serial command console
+# ===========================================================================
+#
+# The console lives on a USART.  Which one is NOT assumed -- uTasker's own
+# `fnConfigSCI` (0x0800cac0) opens THREE register blocks on this image (measured
+# 2026-09-29: USART1 0x40011000, USART2 0x40004400, USART3 0x40004800, each with
+# CR1.UE|TE|RE|RXNEIE set), and only the firmware knows which of them has an
+# application behind it.  `console.probe_channels()` asks all three the same
+# question and the run records which answered.
+#
+# ⚠ THE OTHER TWO ARE NOT INVENTORY ENTRIES, AND THAT WAS MEASURED, NOT ASSUMED.
+# A well-formed MODBUS-RTU FC03 (correct CRC-16) was sent to 0x40011000 and
+# 0x40004400 at slave addresses 1..8 and 0xff.  The firmware's own driver READ
+# every byte (`fnSciRxByte` ran -- the model logged each DR read) and NOTHING was
+# ever transmitted back, while on the SAME boot the console answered on
+# 0x40004800 and `up_time` advanced, so the RTOS clock that an RTU end-of-frame
+# timer needs was demonstrably running.  Two arms: once with the clock frozen
+# (uninterpretable on its own -- a null result eliminates nothing unless the
+# model was right) and once with HAL_UT_TICK_HZ=20.  An open UART with no
+# application behind it fails RULES §1d's test -- "would this firmware, running,
+# ever serve that interface?" -- so the denominator stays TWO.
+#
+#: The console's OWN published menu is the shrink guard, parsed from the guest's
+#: bytes on EVERY round.  ⚠ This is NOT the interface inventory: the 2026-09-17
+#: lane established that this table is a COMMAND list, not a capability manifest
+#: (it offers USB/I2C/CAN/utFAT menus on a build that implements none of them).
+#: It is here for the reason vesc-bms uses its menu -- so that a run in which the
+#: console answers LESS than it declares cannot score as full coverage.
+#: MISMATCH EITHER WAY VOIDS the console entry rather than failing it.
+CONSOLE_MAIN_MENU_TOKENS = frozenset({
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "help", "quit"})
+CONSOLE_STATS_MENU_TOKENS = frozenset({
+    "up", "ipstat", "r_ipstat", "up_time", "memory", "help", "quit"})
+#: the console's own answer to a command it does not have
+CONSOLE_UNKNOWN_MARK = b"??"
+CONSOLE_ROUNDS = 3
+#: quiescence window and its ceiling, in seconds. ⚠ These are NOT a classifier:
+#: a reply still arriving when the ceiling expires is recorded `growing` and the
+#: round is UNMEASURED, never failed. They are exposed so the emulator-free
+#: controls in tests/test_console_seam.py can run in a second instead of a
+#: minute, and so a loaded box can be given a longer window without editing code.
+CONSOLE_QUIET_S = float(os.environ.get("HAL_UT_TTY_QUIET", "4.0"))
+CONSOLE_CEILING_S = float(os.environ.get("HAL_UT_TTY_CEILING", "40.0"))
+CONSOLE_PROBE_CEILING_S = float(os.environ.get("HAL_UT_TTY_PROBE_CEILING", "30.0"))
+
+
+def run_console(stage: Callable, rng: random.Random,
+                rounds: int = CONSOLE_ROUNDS,
+                frames_injected: int = 0,
+                frames_received: int = 0) -> Dict[str, Any]:
+    """Drive uTasker's own serial command console to a graded round trip.
+
+    Seven terms per round, ALL of which must hold, for `rounds` of `rounds`
+    (Rule 2: `passed == rounds`, never `>= 1`):
+
+      1 `menu_matches_registered`  the main menu the guest printed has EXACTLY
+        the pre-registered token set -- the shrink guard.
+      2 `stats_menu_matches`       navigating to the statistics sub-menu prints
+        exactly its registered token set (a second declared command, and proof
+        that navigation is the firmware's own state machine).
+      3 `ipstat_invariant`         `Total Rx frames` equals the sum of the
+        firmware's own per-protocol Rx counters, `Total Tx frames` the sum of its
+        Tx counters, and both are non-zero.  A VALUE, with an invariant the
+        firmware maintains between counters no request carries.
+      4 `memory_invariant`         `Free heap = 0x.. from 0x..` with
+        0 < free < total.  A second VALUE, of a different kind.
+      5 `undeclared_refused`       a per-round RANDOM token draws the console's
+        own unknown-command answer and no menu.
+      6 `discriminates`            the declared and undeclared replies DIFFER.
+        RULES §1c: a boolean "it replied" is the weak case; the seam has to
+        discriminate, N of N, with the firmware's own parser deciding each time.
+      7 `alive_after`              the menu still answers after the bad token.
+
+    A reply that was still arriving when its ceiling expired is `growing` and
+    the round is recorded UNMEASURED rather than failed -- never let a run budget
+    do the classifying.
+    """
+    out: Dict[str, Any] = {"rounds": rounds, "passed": 0, "ok": False,
+                           "voided": False, "unmeasured": 0, "results": []}
+    probe = console.probe_channels(quiet=CONSOLE_QUIET_S,
+                                  ceiling=CONSOLE_PROBE_CEILING_S)
+    answered = sorted(b for b, d in probe.items() if d)
+    out["channel_probe"] = {"0x%08x" % b: len(d) for b, d in probe.items()}
+    out["answering_blocks"] = ["0x%08x" % b for b in answered]
+    stage("console_probe", result=out["channel_probe"],
+          note="the firmware opened %d USART blocks; %d answered a bare CR: %s"
+               % (len(probe), len(answered), out["answering_blocks"]))
+    if len(answered) == 0:
+        # MEASURED AND FAILED, not voided. The bytes were delivered to every
+        # opened block and no block answered -- which is exactly what the
+        # --console-deaf knob is supposed to produce, so it must score as a
+        # failed entry (parity 1 of 2) and not as "no parity published".
+        out["failed_reason"] = ("no opened USART block answered a bare CR; the "
+                               "console entry was DRIVEN and did not answer")
+        stage("console", note=out["failed_reason"])
+        return out
+    if len(answered) > 1:
+        # Genuinely a measurement problem: more than one block answering means
+        # the seam is not identified, so no parity can be published either way.
+        out["voided"] = True
+        out["void_reason"] = ("%d opened USART blocks answered, so which one "
+                             "carries the console is not identified" % len(answered))
+        return out
+    chan = answered[0]
+    out["console_block"] = "0x%08x" % chan
+
+    for i in range(rounds):
+        r: Dict[str, Any] = {"round": i + 1}
+        # a known starting state: leave whatever sub-menu we are in.
+        console.ask(chan, b"quit\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        main_blob, main_st = console.ask(chan, b"help\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        main_tokens = frozenset(console.parse_menu(main_blob))
+        r["main_status"] = main_st
+        r["main_tokens"] = sorted(main_tokens)
+
+        stats_blob, stats_st = console.ask(chan, b"5\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        stats_tokens = frozenset(console.parse_menu(stats_blob))
+        r["stats_status"] = stats_st
+        r["stats_tokens"] = sorted(stats_tokens)
+
+        ip_blob, ip_st = console.ask(chan, b"ipstat\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        st = console.parse_ipstat(ip_blob)
+        inv = console.ipstat_invariants(st)
+        r["ipstat_status"] = ip_st
+        r["ipstat"] = inv
+
+        mem_blob, mem_st = console.ask(chan, b"memory\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        mem = console.parse_memory(mem_blob)
+        r["memory_status"] = mem_st
+        r["memory"] = mem
+
+        up_blob, up_st = console.ask(chan, b"up_time\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        r["uptime_status"] = up_st
+        r["uptime_s"] = console.parse_uptime(up_blob)
+
+        # an undeclared token: minted THIS round, so no transcript can hold it
+        tok = ("z%s" % secrets.token_hex(3)).encode()
+        bad_blob, bad_st = console.ask(chan, tok + b"\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        r["undeclared_token"] = tok.decode()
+        r["undeclared_status"] = bad_st
+        r["undeclared_reply"] = bad_blob.decode("latin-1")
+
+        after_blob, after_st = console.ask(chan, b"help\r", quiet=CONSOLE_QUIET_S, ceiling=CONSOLE_CEILING_S)
+        after_tokens = frozenset(console.parse_menu(after_blob))
+        r["after_status"] = after_st
+
+        statuses = [main_st, stats_st, ip_st, mem_st, bad_st, after_st]
+        if "growing" in statuses:
+            r["unmeasured"] = True
+            r["passed"] = False
+            r["note"] = ("a reply was still arriving when its ceiling expired "
+                         "(%s) -- recorded UNMEASURED, not failed" % statuses)
+            out["unmeasured"] += 1
+            out["results"].append(r)
+            stage("console_round", result=r, note=r["note"])
+            continue
+
+        terms = {
+            "menu_matches_registered": main_tokens == CONSOLE_MAIN_MENU_TOKENS,
+            "stats_menu_matches": stats_tokens == CONSOLE_STATS_MENU_TOKENS,
+            "ipstat_invariant": bool(inv["rx_adds_up"] and inv["tx_adds_up"]
+                                     and inv["rx_nonzero"] and inv["tx_nonzero"]),
+            "memory_invariant": bool(mem["coherent"]),
+            "undeclared_refused": bool(CONSOLE_UNKNOWN_MARK in bad_blob
+                                       and not console.parse_menu(bad_blob)),
+            "discriminates": bad_blob != main_blob and bad_blob != stats_blob,
+            "alive_after": after_tokens == CONSOLE_STATS_MENU_TOKENS,
+        }
+        # The shrink guard VOIDS rather than fails: a menu that does not match
+        # the registered set either way means the denominator this round was
+        # graded against is not the one that was pre-registered.
+        if main_st != "silent" and main_tokens and not terms["menu_matches_registered"]:
+            out["voided"] = True
+            out["void_reason"] = (
+                "the guest's own main menu is %s, the pre-registered set is %s "
+                "-- MISMATCH EITHER WAY VOIDS parity (round %d)"
+                % (sorted(main_tokens), sorted(CONSOLE_MAIN_MENU_TOKENS), i + 1))
+        r["terms"] = terms
+        r["passed"] = all(terms.values())
+        out["results"].append(r)
+        if r["passed"]:
+            out["passed"] += 1
+        stage("console_round",
+              note="round %d/%d: menu %d tokens, stats %d tokens, Rx %s=%s Tx "
+                   "%s=%s, heap %s/%s, undeclared %r -> %r, passed=%s"
+                   % (i + 1, rounds, len(main_tokens), len(stats_tokens),
+                      inv["total_rx"], inv["rx_parts_sum"],
+                      inv["total_tx"], inv["tx_parts_sum"],
+                      mem.get("free_hex"), mem.get("total_hex"),
+                      r["undeclared_token"],
+                      r["undeclared_reply"].strip()[-8:], r["passed"]))
+
+    # Rule 2: strict. `passed == rounds`, and a void is never a pass.
+    out["ok"] = (not out["voided"] and out["unmeasured"] == 0
+                 and out["passed"] == rounds and rounds > 0)
+    # Corroboration, reported and NOT gating: the guest's own frame counters
+    # against what this host actually moved.  This is the deaf-console guard --
+    # these numbers exist in no handler, model or config of ours.
+    last = next((x for x in reversed(out["results"]) if x.get("ipstat")), None)
+    if last:
+        out["cross_check"] = {
+            "host_frames_injected": frames_injected,
+            "host_frames_received": frames_received,
+            "guest_total_rx": last["ipstat"]["total_rx"],
+            "guest_total_tx": last["ipstat"]["total_tx"],
+            "guest_rx_ge_host_injected": (
+                last["ipstat"]["total_rx"] is not None
+                and last["ipstat"]["total_rx"] >= frames_injected),
+            "guest_tx_ge_host_received": (
+                last["ipstat"]["total_tx"] is not None
+                and last["ipstat"]["total_tx"] >= frames_received),
+        }
+    return out
+
+
 #: M8's currency is DECLARATIONS (RULES §1b) -- of the IMAGE UNDER TEST (§1d).
 M8_DECLARED_INTERFACES = [
-    "MODBUS/TCP :502 -- GRADED, AT M4 (port 0x01f6 in cMODBUS_default "
-    "@0x08015540; fnMODBUSListener 0x08012738)",
-    "uTasker serial command console -- banner 'uTasker-MODBUS-slave  ' "
-    "@0x0801552a, 'ADMIN' @0x080154ad, 'Command line blocked' @0x08012eb4; "
-    "NOT driven by this rehost",
+    "MODBUS/TCP :502 (port 0x01f6 in cMODBUS_default @0x08015540; "
+    "fnMODBUSListener 0x08012738)",
+    "uTasker serial command console on a USART -- banner "
+    "'uTasker-MODBUS-slave  ' @0x0801552a, 'ADMIN' @0x080154ad, 'Command line "
+    "blocked' @0x08012eb4; the command interpreter reached through "
+    "fnSciRxByte 0x0800c946 / fnSciTxByte 0x0800f460",
 ]
 
 #: M5's currency is §1a-INDEPENDENT interfaces.  Derived by collapsing
@@ -723,8 +940,59 @@ assert M5_INDEPENDENT_INTERFACES is not M8_DECLARED_INTERFACES, (
 
 M5_INVENTORY_SIZE = len(M5_INDEPENDENT_INTERFACES)
 M8_INVENTORY_SIZE = len(M8_DECLARED_INTERFACES)
-M5_AT_M4 = 1          # MODBUS/TCP :502
-M8_AT_M4 = 1          # same seam, counted under the other rung's currency
+
+
+def interface_parity(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Which inventory entries THIS RUN drove to M4.
+
+    ⚠ The numerator is computed from the run's own observations every time. It
+    used to be the module constants `M5_AT_M4 = 1` / `M8_AT_M4 = 1`, which is a
+    FALSE FLOOR: a hard-coded numerator credits an interface in a run that never
+    touched it, and cannot be moved by any control arm. Both are gone.
+
+    Each entry is credited by ITS OWN witness, and each witness carries a VALUE:
+      * MODBUS/TCP :502 -- the FC06 read-back of an attacker-chosen 16-bit value
+        through the firmware's own MODBUS engine, gated on provenance.
+      * the serial console -- the guest's own `ipstat` counters (which satisfy an
+        addition invariant the firmware maintains) and its own `Free heap = 0x..
+        from 0x..`, with a declared command discriminated from an undeclared one.
+    Neither shares a term, a variable or a string with the other.
+
+    VACUITY: an empty inventory is a fault, never `0 of 0` -- `all([])` is
+    vacuously true and has scored a dead arm as perfect twice on this fleet.
+    """
+    if M8_INVENTORY_SIZE < 1 or M5_INVENTORY_SIZE < 1:
+        return {"parity": "unmeasured",
+                "fault": "the inventory is empty; parity is undefined"}
+    modbus_ok = bool(result.get("modbus_round_trip")
+                     and (result.get("provenance") or {}).get("ok"))
+    console_ok = bool(result.get("console_round_trip"))
+    if result.get("console") and (result["console"].get("voided")
+                                  or result["console"].get("unmeasured")):
+        console_ok = False
+    passed = [i for i, ok in enumerate((modbus_ok, console_ok)) if ok]
+    voided = bool((result.get("console") or {}).get("voided"))
+    out = {
+        "entries": list(M8_DECLARED_INTERFACES),
+        "passed": passed,
+        "inventory_size": M8_INVENTORY_SIZE,
+        "m8": "%d of %d" % (len(passed), M8_INVENTORY_SIZE),
+        "m5": "%d of %d" % (len(passed), M5_INVENTORY_SIZE),
+        # STRICT (Rule 2 per ENTRY): parity is len(passed) == size, never >= 1,
+        # and never satisfiable by a subset.
+        "interface_parity_full": (len(passed) == M8_INVENTORY_SIZE
+                                  and M8_INVENTORY_SIZE > 0 and not voided),
+        "witnesses": {
+            "MODBUS/TCP :502": "FC06 read-back of an attacker-chosen value",
+            "serial console": "ipstat counter invariant + Free heap figure, "
+                              "declared vs undeclared discrimination",
+        },
+    }
+    if voided:
+        out["voided"] = True
+        out["void_reason"] = result["console"].get("void_reason")
+    return out
+
 
 INTERFACE_INVENTORY = {
     "derivation": "the image's own bytes: the MODBUS listener port constant, "
@@ -732,8 +1000,8 @@ INTERFACE_INVENTORY = {
                   "every TCP port the firmware's own stack will accept",
     "declared_services": M8_DECLARED_INTERFACES,
     "independent_interfaces": M5_INDEPENDENT_INTERFACES,
-    "m5": "DEFINED and UNMET at %d of %d" % (M5_AT_M4, M5_INVENTORY_SIZE),
-    "m8": "DEFINED and UNMET at %d of %d" % (M8_AT_M4, M8_INVENTORY_SIZE),
+    "m5": "DEFINED, graded per run by interface_parity() -- see the result",
+    "m8": "DEFINED, graded per run by interface_parity() -- see the result",
     "shared_substrate": (
         "NONE between the two entries. MODBUS/TCP :502 runs over the Ethernet "
         "MAC and uTasker's TCP/IP stack; the command console runs over the "
@@ -760,6 +1028,18 @@ INTERFACE_INVENTORY = {
         "disk interface' -- each token occurs ONLY inside the menu table and "
         "nowhere else in the image. This is what proves the table is a "
         "command list, not a capability manifest.",
+        "USART1 (0x40011000) and USART2 (0x40004400) -- uTasker's own "
+        "fnConfigSCI OPENS all three USART blocks (CR1.UE|TE|RE|RXNEIE set at "
+        "pc 0x0800cdce/0x0800d09c, measured 2026-09-29), so 'a UART is open' "
+        "looked like two more entries. MEASURED, NOT ASSUMED: a well-formed "
+        "MODBUS-RTU FC03 with a correct CRC-16 was delivered to both at slave "
+        "addresses 1..8 and 0xff; the firmware's own driver READ every byte and "
+        "transmitted NOTHING, on a boot where the console answered on "
+        "0x40004800 (positive control) and up_time advanced (so the RTOS clock "
+        "an RTU end-of-frame timer needs was running). An open link with no "
+        "application behind it fails RULES §1d. These would have GROWN the "
+        "denominator, not shrunk it -- and they are excluded on a measurement, "
+        "so the denominator is unchanged at 2.",
     ],
     "disputed": (
         "TELNET. 'set_telnet' @0x08015e84 and '   Telnet port number = ' "
@@ -769,8 +1049,13 @@ INTERFACE_INVENTORY = {
         "block."),
 }
 
-M5_M8_STATUS = (
-    "DEFINED and UNMET at 1 of 2 (M5) and 1 of 2 (M8), computed separately. "
+#: The DERIVATION of the inventory -- how the two entries were arrived at. It is
+#: a property of the IMAGE, so it is static, and it says nothing about what any
+#: run achieved. The `k of n` is computed per run by `interface_parity()`; a
+#: hard-coded "1 of 2" in this string was a false floor and is gone.
+M5_M8_DERIVATION = (
+    "The inventory is TWO entries, computed separately for M5 (independence, "
+    "RULES §1a) and M8 (coverage, §1b). "
     "CORRECTED 2026-09-17 from 1 of 4: that reading took uTasker's generic "
     "debug.c COMMAND TABLE for a service manifest, and the same table in this "
     "same image also offers 'Go to USB menu', 'Go to I2C menu', 'CAN commands' "
@@ -788,22 +1073,49 @@ M5_M8_STATUS = (
     "handshake remain SUBSTRATE, not a second interface (RULES §1a, "
     "2026-09-02) -- that disposal stands, and the RST-ACKs are that same "
     "substrate being used as evidence ABOUT the inventory. M6/M7 do not "
-    "require M5 (same ruling).")
+    "require M5 (same ruling). 2026-09-29: uTasker's own fnConfigSCI OPENS "
+    "THREE USART blocks, which looked like two further entries; a well-formed "
+    "MODBUS-RTU FC03 to USART1 and USART2 at slave addresses 1..8/0xff drew "
+    "NOTHING on a boot where the console answered and up_time advanced, so "
+    "they fail §1d and the denominator stays 2 -- a candidate EXPANSION "
+    "refuted on a measurement, not a shrink.")
+
+
+def m5_m8_status(parity: Dict[str, Any]) -> str:
+    """The run's own `k of n`, followed by the static derivation."""
+    if parity.get("parity") == "unmeasured":
+        return "UNMEASURED: %s. %s" % (parity.get("fault"), M5_M8_DERIVATION)
+    if parity.get("voided"):
+        return ("VOIDED (%s) -- the shrink guard did not pass, so no parity is "
+                "published for this run. %s"
+                % (parity.get("void_reason"), M5_M8_DERIVATION))
+    verdict = ("MET" if parity.get("interface_parity_full")
+               else "DEFINED and UNMET")
+    return ("%s at %s (M5) and %s (M8), computed separately. %s"
+            % (verdict, parity["m5"], parity["m8"], M5_M8_DERIVATION))
 
 
 def _extend_milestone(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Raise the milestone to M6/M7 when this run measured them.
+    """Raise the milestone to M6/M7/M8 when this run measured them.
 
-    Each is graded **off M4, never off the other**: a scorer that chains
-    M7 <- M6 is a defect in the scorer, not a property of the ladder (RULES
-    §1a, 2026-09-02), and this device's `--m6-freeze` arm demonstrates it.
+    M6 and M7 are each graded **off M4, never off the other**: a scorer that
+    chains M7 <- M6 is a defect in the scorer, not a property of the ladder
+    (RULES §1a, 2026-09-02), and this device's `--m6-freeze` arm demonstrates it.
+
+    M8 is **interface parity** and is graded off the run's own per-entry
+    witnesses (`interface_parity`), not off M6 or M7 -- for the same reason. It
+    is written only when EVERY entry in the independently derived inventory
+    passed M4 in THIS run, strictly (`len(passed) == inventory_size`).
 
     A harness fault blanks the milestone entirely, so a run that could not
     measure credits no rung at all -- including the M4 it may already have had.
     "Could not measure" must never share a value with "measured and it was bad"
     (playbook w29.2/w37.3).
     """
-    result["m5_m8_status"] = M5_M8_STATUS
+    parity = interface_parity(result)
+    result["interface_parity"] = parity
+    result["interface_parity_full"] = bool(parity.get("interface_parity_full"))
+    result["m5_m8_status"] = m5_m8_status(parity)
     m6 = bool(result.get("m6_stateful"))
     m7 = bool(result.get("m7_adversarial_tolerated"))
     result["m6_stateful"] = m6
@@ -813,7 +1125,9 @@ def _extend_milestone(result: Dict[str, Any]) -> Dict[str, Any]:
         result["landed"] = False
         return result
     if result.get("milestone") == "M4" and result.get("landed"):
-        if m7:
+        if result["interface_parity_full"]:
+            result["milestone"] = "M8"
+        elif m7:
             result["milestone"] = "M7"
         elif m6:
             result["milestone"] = "M6"
@@ -827,7 +1141,9 @@ def run_attack(on_stage: Optional[Callable] = None,
                emulator: str = "unicorn",
                ladder: bool = True,
                m6_freeze: bool = False,
-               m7_wellformed: bool = False) -> Dict[str, Any]:
+               m7_wellformed: bool = False,
+               console_phase: bool = True,
+               console_deaf: bool = False) -> Dict[str, Any]:
     """Boot the uTasker MODBUS slave, run the unauthenticated FC06 write, and
     verify from the firmware's OWN output. Self-booting: spawns its own rehost and
     tears it down. Returns a dict with at least {"booted", "landed"}."""
@@ -859,7 +1175,19 @@ def run_attack(on_stage: Optional[Callable] = None,
 
     ld = log_dir or os.environ.get("TMPDIR", "/tmp")
     os.makedirs(ld, exist_ok=True)
-    log_path = os.path.join(ld, "utasker_modbus_attack.log")
+    # ⚠ UNIQUE PER RUN. This was a FIXED basename, and `bridge_bound` is read
+    # back OUT of this file -- so two arms of this device running at the same
+    # time each opened it with mode "w" and the second TRUNCATED the first, after
+    # which the first could no longer find its own `spool=` line and reported
+    # `provenance.ok: false`. Measured 2026-09-29: an arm with
+    # `write_acknowledged: true` and `after_hex: 0x1244` -- a completed round
+    # trip -- printed `landed: false, milestone: M3`. The oracle was reading a
+    # file another process owned. A false POSITIVE was never possible (the string
+    # searched for contains this run's own unguessable spool path), so no
+    # recorded result was ever inflated by this; it manufactures FALSE
+    # NEGATIVES, which is how it was caught.
+    log_path = os.path.join(ld, "utasker_modbus_attack-%d-%d.log"
+                            % (os.getpid(), int(time.time() * 1000) % 1000000))
 
     spool = _private_spool()
     result["spool"] = spool
@@ -867,10 +1195,25 @@ def run_attack(on_stage: Optional[Callable] = None,
     logf = None
     sport = 50400
     try:
-        argv = spawn.spawn_argv(emulator=emulator,
-                                overlays=[paths.ETH_BRIDGE_OVERLAY])
-        env = spawn.spawn_env(extra={"HAL_ION_QUIET": "1",
-                                     "HAL_UT_ETH_SPOOL": spool})
+        # The console overlay models the USART register blocks so uTasker's own
+        # command console -- the second inventory entry -- has a wire. It is on
+        # the DEFAULT path: a rung is a property of a RUN, so the invocation a
+        # verifier types must be the one the census header cites (playbook w35).
+        # ALWAYS mapped, on every arm including --no-console: the peripheral map
+        # must be identical across arms or the knob would change the machine as
+        # well as the observation, and no arm would be comparable to another.
+        overlays = [paths.ETH_BRIDGE_OVERLAY, paths.CONSOLE_OVERLAY]
+        argv = spawn.spawn_argv(emulator=emulator, overlays=overlays)
+        extra_env = {"HAL_ION_QUIET": "1", "HAL_UT_ETH_SPOOL": spool}
+        if console_deaf:
+            # THE M8 FALSIFICATION KNOB. The host's bytes are still queued into
+            # the model's RX FIFO and the model still answers SR/DR, but the
+            # firmware's own ISR is never called, so nothing ever reaches
+            # fnSciRxByte. The console entry must then FAIL and parity must fall
+            # back to 1 of 2 with :502 untouched.
+            extra_env["HAL_UT_TTY_DEAF"] = "1"
+        env = spawn.spawn_env(extra=extra_env)
+        console.set_spool(spool)
         logf = open(log_path, "w")
         stage("boot",
               note="booting uTasker MODBUS/TCP slave (STM32F4, ARMv7E-M) + eth "
@@ -939,6 +1282,12 @@ def run_attack(on_stage: Optional[Callable] = None,
         # sent, and both phases send plenty (playbook w33.2).
         if not ladder:
             result["ladder_skipped_reason"] = "ladder=False"
+            # The console phase lives inside the ladder block, so say so rather
+            # than leaving `console_skipped_reason` null and letting a reader
+            # infer the entry was measured and failed.
+            result["console_skipped_reason"] = (
+                "ladder=False -- the console phase is part of the ladder, so the "
+                "second inventory entry was NOT MEASURED on this arm")
         elif SEAM_CONTROL:
             result["ladder_skipped_reason"] = (
                 "HAL_SEAM_CONTROL=1 -- the M6/M7 phases transmit MODBUS PDUs, "
@@ -971,6 +1320,24 @@ def run_attack(on_stage: Optional[Callable] = None,
                                     m7["spec_predicted_classes"],
                                     m7["known_good_after"], m7_wellformed,
                                     m7["ok"]))
+                # ---- the SECOND inventory entry, same boot ------------------
+                if console_phase:
+                    n_tx = modbus.count_tx_frames()
+                    n_rx = modbus.frames_sent()
+                    con = run_console(stage, rng, frames_injected=n_rx,
+                                      frames_received=n_tx)
+                    result["console"] = con
+                    result["console_round_trip"] = bool(con["ok"])
+                    result["console_deaf"] = console_deaf
+                    stage("console",
+                          note="%d/%d rounds on %s (deaf arm=%s, voided=%s, "
+                               "unmeasured=%d) -> %s"
+                               % (con["passed"], con["rounds"],
+                                  con.get("console_block"), console_deaf,
+                                  con.get("voided"), con["unmeasured"],
+                                  con["ok"]))
+                else:
+                    result["console_skipped_reason"] = "console_phase=False"
             except Exception as exc:                        # noqa: BLE001
                 # A defect in THIS code is a harness fault, not a device
                 # result, and must print no rung (playbook w29.2/w37.3).
@@ -1005,6 +1372,18 @@ def main(argv: Optional[List[str]] = None) -> int:
                         "twin instead of the malformed frame, scored by the "
                         "SAME predicate. Every twin is answered normally, so "
                         "the phase goes 0/8 while M4 and M6 are untouched.")
+    p.add_argument("--no-console", dest="console_phase", action="store_false",
+                   help="skip the serial-console phase; the USART page is still "
+                        "mapped, so the machine is unchanged. Interface parity "
+                        "then reports 1 of 2 because the second entry was NOT "
+                        "MEASURED, which is not the same as refused.")
+    p.add_argument("--console-deaf", action="store_true",
+                   help="M8's falsification knob: the host's bytes are still "
+                        "queued into the USART model's RX FIFO and the model "
+                        "still answers SR/DR, but the firmware's OWN USART ISR "
+                        "is never called, so nothing reaches fnSciRxByte. The "
+                        "console entry fails, parity returns to 1 of 2 and the "
+                        "milestone falls back to M7; :502 is untouched.")
     # Reject unknown argv rather than ignoring it: a main() that takes no argv
     # silently swallows a documented-looking flag (playbook §2.200).
     args = p.parse_args(argv)
@@ -1017,13 +1396,28 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     res = run_attack(on_stage=show, ladder=args.ladder,
                      m6_freeze=args.m6_freeze,
-                     m7_wellformed=args.m7_wellformed)
+                     m7_wellformed=args.m7_wellformed,
+                     console_phase=args.console_phase,
+                     console_deaf=args.console_deaf)
     summary = {k: v for k, v in res.items()
                if k in ("booted", "landed", "milestone", "modbus_round_trip",
                         "seam_control", "harness_fault", "m6_stateful",
                         "m7_adversarial_tolerated", "m6_freeze",
                         "m7_wellformed", "ladder_skipped_reason",
+                        "console_round_trip", "console_deaf",
+                        "console_skipped_reason", "interface_parity_full",
                         "m5_m8_status")}
+    if isinstance(res.get("interface_parity"), dict):
+        ip = res["interface_parity"]
+        summary["interface_parity"] = ip.get("m8")
+        summary["interfaces_passed"] = ip.get("passed")
+    if isinstance(res.get("console"), dict):
+        con = res["console"]
+        summary["console_passed"] = "%d/%d" % (con["passed"], con["rounds"])
+        summary["console_block"] = con.get("console_block")
+        summary["console_answering_blocks"] = con.get("answering_blocks")
+        summary["console_cross_check"] = con.get("cross_check")
+        summary["console_voided"] = con.get("voided")
     if isinstance(res.get("m6"), dict):
         summary["m6_passed"] = "%d/%d" % (res["m6"]["passed"], res["m6"]["rounds"])
     if isinstance(res.get("m7"), dict):

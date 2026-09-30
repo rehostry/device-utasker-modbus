@@ -13,14 +13,20 @@ uTasker MODBUS slave (STM32F4, ARMv7E-M)
         ▸ ARP ▸ TCP :502 ▸ fnHandleMODBUS_input ▸ MODBUS reply   [M4]
 ```
 
-> **Status: M7, with a panel and attack.** The RTOS boots, schedules its tasks, brings the Ethernet
-> MAC/PHY fully up, and answers a **real MODBUS/TCP request on :502** — ARP
-> resolve, TCP 3-way handshake, FC03 request, and the firmware's own MODBUS reply
-> (`000100000003018302`). Zero emulator faults. M6 and M7 are measured on top of
-> that round trip; **M5 and M8 are each defined and unmet at 1 of 2** — the
-> inventory has **two** entries and exactly **one** of them reaches M4. The
-> second is uTasker's own serial command console, declared and not driven.
-> See [`STATUS.md`](STATUS.md).
+> **Status: M8 — interface parity, with a panel and attack.** The RTOS boots,
+> schedules its tasks, brings the Ethernet MAC/PHY fully up, and answers a **real
+> MODBUS/TCP request on :502** — ARP resolve, TCP 3-way handshake, FC03 request,
+> and the firmware's own MODBUS reply (`000100000003018302`). Zero emulator
+> faults. M6 and M7 are measured on top of that round trip.
+>
+> **M5 and M8 are each MET at 2 of 2.** The inventory has **two** entries — the
+> denominator is **n = 2**, not 1 — and on the same boot **both** of them reach
+> M4: MODBUS/TCP on :502, and **uTasker's own serial command console**, which is
+> now driven through the firmware's own USART driver (`fnSciRxByte` in,
+> `fnSciTxByte`/`fnTxByte` out) over a modelled STM32 USART. The console answers
+> its own published menu, its own `ipstat` counters (which satisfy an addition
+> invariant the firmware maintains) and its own heap figures, and it refuses a
+> command it does not have. See [`STATUS.md`](STATUS.md).
 
 ## What's real
 
@@ -38,11 +44,28 @@ uTasker MODBUS slave (STM32F4, ARMv7E-M)
   * `peripheral_models/cortex_m_scs.py` — NVIC set/clear-register semantics.
     Correct but **not wired in**: it proved unnecessary for M4 and wiring it
     regresses the RTOS tick (see [`STATUS.md`](STATUS.md)).
+  * `peripheral_models/stm32_usart.py` — the USART register blocks, reversed from
+    `fnTxByte` (0x0800d172) and the firmware's own `USARTn_IRQHandler`s. It mints
+    only the *wire* condition (`SR.TXE`, `SR.RXNE`); every byte in and out is
+    moved by the firmware's own driver.
 * **Frame plumbing on the firmware's own seams:** RX via `fnSimulateEthernetIn`
   (the driver's software-reception entry point, driven with a borrowed CPU
   context), TX observed at `fnStartEthTx`. The MODBUS reply bytes are whatever
   `fnHandleMODBUS_input` / `fnSendMODBUS_response` produced — the host peer
   synthesises nothing.
+* **Console plumbing on the firmware's own seams too:** `bp_handlers/serial_bridge.py`
+  queues a host byte into the USART model and then calls **the handler the
+  firmware itself installed** for that IRQ — the bridge reads the address back out
+  of uTasker's relocated RAM vector table (`[0x20000000 + 0x40 + 4*IRQ]`) and
+  refuses to inject if it is not the one it expected. The ISR then reads CR1/SR/DR
+  through the model and calls `fnSciRxByte`; the reply comes back out through
+  `fnSciTxByte` → `fnTxByte` → `DR`.
+* **Which USART carries the console was measured, not assumed.** uTasker's own
+  `fnConfigSCI` opens **three** blocks (USART1/2/3). The same bytes go to all
+  three in one observation window; only **USART3 (0x40004800)** answers, and a
+  well-formed MODBUS-RTU FC03 to the other two draws nothing even with the RTOS
+  clock running — so they are open links with no application behind them and are
+  not inventory entries (RULES §1d).
 
 ## Core dependency
 
@@ -89,10 +112,19 @@ python3 -c "import subprocess; from rehostry_utasker_modbus import spawn, paths;
                  cwd=spawn.spawn_cwd(), env=spawn.spawn_env())"
 python3 tools/modbus_peer.py arp               # ARP round-trip (proves RX -> stack -> TX)
 python3 tools/modbus_peer.py fc03              # full MODBUS/TCP FC03 round-trip  [M4]
+
+# the falsification knobs, both arms of each
+python3 -m rehostry_utasker_modbus.attack --m6-freeze       # M6 3/3 -> 0/3
+python3 -m rehostry_utasker_modbus.attack --m7-wellformed   # M7 8/8 -> 0/8
+python3 -m rehostry_utasker_modbus.attack --console-deaf    # parity 2/2 -> 1/2, M8 -> M7
+python3 -m rehostry_utasker_modbus.attack --no-console      # parity 1/2, NOT MEASURED
+python3 -m rehostry_utasker_modbus.attack --no-ladder       # the M4-only run
+HAL_SEAM_CONTROL=1 python3 -m rehostry_utasker_modbus.attack   # -> M3
 ```
 
 Diagnostics: `HAL_UT_PROBE_TRACE=N`, `HAL_UT_WATCH=0xaddr,...`,
-`HAL_UT_ETH_TRACE=1`, `HAL_UT_ETH_VERBOSE=1`.
+`HAL_UT_ETH_TRACE=1`, `HAL_UT_ETH_VERBOSE=1`, `HAL_UT_UART_TRACE=1`
+(every USART register access), `HAL_UT_TTY=0` (no serial bridge at all).
 
 ## Panel and attack
 

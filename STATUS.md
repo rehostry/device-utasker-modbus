@@ -1,29 +1,45 @@
-<!-- rehostry-census: milestone=M7 landed=true verdict=M4-OK verified=2026-09-17 method=live-run note=M5-and-M8-EACH-DEFINED-and-UNMET-at-1-of-2-CORRECTED-2026-09-17-from-1-of-4;the-2026-09-08-reading-took-uTasker-s-GENERIC-debug-c-COMMAND-TABLE-for-a-service-manifest-and-the-SAME-table-in-the-SAME-image-also-offers-Go-to-USB-menu-Go-to-I2C-menu-CAN-commands-and-Go-to-utFAT-disk-interface-on-a-build-that-implements-NONE-of-them;WEB-and-FTP-have-ZERO-implementing-strings-in-this-image-and-TELNET-was-settled-LIVE-(the-firmware-s-OWN-stack-SYN-ACKs-502-first-middle-and-last-and-RST-ACKs-20-21-22-23-25-69-80-161-443-503-992-2323-4444-8000-8080;a-1040-port-one-boot-sweep-found-EXACTLY-ONE-listener-502);n-MOVED-IN-BOTH-DIRECTIONS-because-uTasker-s-OWN-SERIAL-COMMAND-CONSOLE-was-ADDED-(banner-uTasker-MODBUS-slave-at-0x0801552a-a-link-with-a-peer-this-rehost-does-NOT-drive-the-duet3-tool1lc-shape);the-ARP-ICMP-substrate-disposal-STANDS-and-the-RST-ACKs-are-that-SAME-substrate-used-as-evidence-ABOUT-the-inventory;M4-M6-M7-UNCHANGED-and-RE-RUN-2026-09-17 -->
+<!-- rehostry-census: milestone=M8 landed=true verdict=M4-OK verified=2026-09-29 method=live-run n=2of2 note=M5-and-M8-EACH-MET-at-2-of-2-2026-09-29;n-IS-THE-PARITY-INVENTORY-of-TWO-DECLARED-INTERFACES-derived-from-the-IMAGE-S-OWN-BYTES-(MODBUS-TCP-502-port-0x01f6-in-cMODBUS_default-0x08015540-plus-uTasker-S-OWN-SERIAL-COMMAND-CONSOLE-banner-0x0801552a)-and-is-NOT-a-count-of-commands-menu-entries-or-round-trip-keys;NO-ENTRY-WAS-REMOVED-the-denominator-is-the-SAME-2-as-2026-09-17-and-k-moved-because-the-SECOND-ENTRY-NOW-PASSES-M4;a-candidate-EXPANSION-to-4-was-REFUTED-LIVE-uTasker-s-OWN-fnConfigSCI-OPENS-THREE-USARTS-(CR1-UE-TE-RE-RXNEIE-at-pc-0x0800cdce-0x0800d09c)-but-a-CRC-VALID-MODBUS-RTU-FC03-to-USART1-0x40011000-and-USART2-0x40004400-at-slave-addresses-1-8-and-0xff-drew-NOTHING-on-a-boot-where-the-console-ANSWERED-(positive-control)-and-the-guest-s-OWN-up_time-ADVANCED-0-01-22-to-0-01-38-(so-the-RTU-end-of-frame-clock-was-RUNNING)-so-they-fail-RULES-1d-and-n-STAYS-2;the-console-entry-was-CLOSED-by-modelling-the-STM32-USART-(peripheral_models-stm32_usart-py-reversed-from-fnTxByte-0x0800d172)-and-CALLING-THE-HANDLER-THE-FIRMWARE-ITSELF-INSTALLED-in-its-relocated-RAM-vector-table-(-0x20000000-plus-0x40-plus-4-IRQ-read-back-0x0800c84d-0x0800c87f-0x0800c8b1-refused-while-it-still-read-0x0800e3d1)-so-fnSciRxByte-0x0800c946-and-fnSciTxByte-0x0800f460-move-EVERY-byte-and-the-model-mints-only-SR-TXE-and-SR-RXNE;console-seam-3-of-3-ROUNDS-x-7-TERMS-on-3-of-3-DEFAULT-RUNS-with-the-guest-s-OWN-menu-token-sets-as-a-SHRINK-GUARD-its-OWN-ipstat-counter-ADDITION-INVARIANT-(Total-Rx-169-equals-sum-169-Total-Tx-57-equals-sum-57)-its-OWN-Free-heap-0x38a0-from-0x8000-and-a-PER-ROUND-RANDOM-undeclared-token-refused-with-its-OWN-double-question-mark;KNOB---console-deaf-(bytes-still-queued-into-the-model-s-RX-FIFO-but-the-firmware-s-OWN-ISR-NEVER-CALLED)-gives-console-0-of-3-parity-1-of-2-and-M7-with-502-UNTOUCHED;---no-console-gives-parity-1-of-2-as-NOT-MEASURED-which-is-a-DIFFERENT-FIELD-from-measured-and-failed;FALSE-FLOOR-REMOVED-the-module-constants-M5_AT_M4-1-and-M8_AT_M4-1-are-GONE-and-the-numerator-is-computed-from-the-run;CHECK-3-credited-but-not-entitled-0-over-ALL-11-ARMS-via-tools-entitled-py-committed-BEFORE-the-graded-arms;M4-M6-M7-RE-RUN-2026-09-29-and-UNCHANGED-(3-of-3-and-8-of-8);DEFECT-FOUND-IN-MY-OWN-WORK-run_attack-s-child-log-path-was-a-FIXED-basename-and-provenance-bridge_bound-is-read-BACK-out-of-it-so-two-concurrent-arms-truncated-each-other-and-one-COMPLETED-round-trip-printed-landed-false-M3-now-pid-stamped-false-NEGATIVES-only-never-a-false-positive;box-at-load-19-to-26-with-ten-lanes-so-EVERY-witness-here-is-a-GUEST-EMITTED-VALUE-not-elapsed-time -->
 <!-- Copyright 2026 Christopher Wright; SPDX-License-Identifier: AGPL-3.0-or-later -->
 # STATUS — uTasker MODBUS slave (STM32F4 / ARMv7E-M) rehost
 
-**Current milestone: M7.** M4 is a genuine MODBUS/TCP round-trip on :502
-against the firmware's own stack, verified end to end: ARP resolve -> TCP 3-way
-handshake -> FC03 request -> the firmware's own MODBUS reply. On the **same
-boot and the same TCP session** the rehost is also **M6 (stateful)** and **M7
-(adversarial-input tolerance)**, each graded off M4 rather than off the other.
+**Current milestone: M8 — interface parity, MET at 2 of 2.** M4 is a genuine
+MODBUS/TCP round-trip on :502 against the firmware's own stack, verified end to
+end: ARP resolve -> TCP 3-way handshake -> FC03 request -> the firmware's own
+MODBUS reply. On the **same boot and the same TCP session** the rehost is also
+**M6 (stateful)** and **M7 (adversarial-input tolerance)**, each graded off M4
+rather than off the other. On the **same boot**, the inventory's **second** entry
+— uTasker's own serial command console — also reaches M4, so **M5 and M8 are each
+MET at 2 of 2** (2026-09-29, lane `s0929-laneE`; see the section at the end).
 
-**M5 and M8 are UNDEFINED here, not failed.** One link, one application service
-on it (MODBUS/TCP on :502), one peer.
+> ⚠ **THE OPENING OF THIS FILE USED TO CONTRADICT ITSELF, AND THAT IS FIXED HERE.**
+> Until 2026-09-29 this paragraph read *"M5 and M8 are UNDEFINED here, not
+> failed. One link, one application service on it, one peer"* — and was then
+> **superseded twice** by blockquotes below it (1 of 4 on 2026-09-08, 1 of 2 on
+> 2026-09-17), leaving a flat `UNDEFINED` claim, two corrections, and a dangling
+> half-sentence, all on the same screen. A reader who stopped at the bold text got
+> **n = 1**, which means M5/M8 *undefined*; a reader who continued got **n = 2**,
+> which means *defined*. Those are opposite claims about the same row. The
+> superseded text and its orphaned fragment are now **deleted rather than layered
+> over**, and the live statement is the one above: **the inventory has TWO
+> entries, n = 2, and both of them now pass M4.** The row has been bitten three
+> times by a denominator that read one way in prose and another in the header;
+> this file now states the number once.
 
-> ⚠ **SUPERSEDED 2026-09-08 (lane INVAPPLY).** The firmware's **own serial configuration menu** declares an FTP server, a WEB server and a TELNET server beside MODBUS/TCP. **M5 and M8 are each DEFINED and UNMET at 1 of 4.** The ARP/ICMP disposal below is correct and stands.
-> See *M5/M8 INTERFACE INVENTORY* at the end of this file. **No rung moves.**
- RULES §1a excludes two function codes over
+**What is still substrate, unchanged.** RULES §1a excludes two function codes over
 one framing layer as a second interface, and the ARP replies and the TCP
-handshake underneath are **stack-level reflexes** — substrate, by the
-2026-09-02 ruling — not a second interface, however genuinely the guest computes
-them. The 2026-09-02 ruling that **M6/M7 do not require M5** is what makes those
-two rungs claimable here on their own evidence.
+handshake underneath are **stack-level reflexes** — substrate, by the 2026-09-02
+ruling — not a second interface, however genuinely the guest computes them. That
+disposal stands and nothing in the M8 work touches it. The 2026-09-02 ruling that
+**M6/M7 do not require M5** is what made those two rungs claimable here on their
+own evidence, and the same reasoning applies to M8: it is a **coverage** rung
+graded off each entry's own M4 witness, not off M6 or M7.
 
-**No `path=` in the census header, on purpose.** The M6 and M7 phases run on the
-*default* invocation `python3 -m rehostry_utasker_modbus.attack`, so the rung a
-verifier reads is the rung the documented command produces (playbook w35).
-`--no-ladder` restores the M4-only run. A whole run is ~34 s.
+**No `path=` in the census header, on purpose.** The M6, M7 and console phases all
+run on the *default* invocation `python3 -m rehostry_utasker_modbus.attack`, so
+the rung a verifier reads is the rung the documented command produces (playbook
+w35). `--no-ladder` restores the M4-only run. A whole default run is ~34 s of
+MODBUS work plus ~2 min of console work (three rounds of seven exchanges, each
+waited out to quiescence rather than to a deadline).
 
 ## 2026-09-05 — M4 → M7
 
@@ -984,3 +1000,450 @@ milestone values the ladder can write are the six these eight arms printed, so
 `halucinator@dev` core through its own venv; `spawn.py` deliberately strips
 `HALUCINATOR_SRC` and `PYTHONPATH` so no out-of-tree core can shadow it. I
 state this rather than patch it (RULES §2a).
+
+---
+
+## 2026-09-29 (lane `s0929-laneE`) — **M7 → M8**: the second inventory entry is now DRIVEN, parity **2 of 2**
+
+**THE DENOMINATOR DID NOT MOVE. NO ENTRY WAS REMOVED.** The inventory is the same
+**two** entries the 2026-09-17 lane derived from the image's own bytes, and the
+`k` moved because the **second one now passes M4**, not because the `n` got
+smaller. A candidate *expansion* to 4 appeared during this work and was
+**refuted on a live measurement** (below) — the one direction that costs the rung,
+tested rather than waved away.
+
+### What was missing, in one line
+
+The 2026-09-17 inventory recorded its second entry as *"uTasker serial command
+console … **NOT driven by this rehost**"*. The whole 0x40000000 SoC window was one
+`AutoPeripheral` catch-all, so the console's bytes went into the catch-all and
+nothing could be read back. Two new pieces close it, and neither synthesises a
+byte on the firmware's behalf.
+
+### 1. `peripheral_models/stm32_usart.py` — the wire, and only the wire
+
+Reversed from the firmware's own code:
+
+```
+fnConfigSCI   0x0800cac0..0x0800cb32   channel -> {base, RCC bit, IRQ}
+      ch0 -> 0x40011000 USART1, RCC_APB2ENR |= 0x10,    IRQ 37
+      ch1 -> 0x40004400 USART2, RCC_APB1ENR |= 0x20000, IRQ 38
+      ch2 -> 0x40004800 USART3, RCC_APB1ENR |= 0x40000, IRQ 39
+
+fnTxByte      0x0800d172
+      0x0800d186  ldr  r2,[r0]      ; SR
+      0x0800d188  lsls r3,r2,#24    ;   bit 7 = TXE
+      0x0800d18c  ldr  r2,[r0,#12]  ; CR1
+      0x0800d18e  orr  r2,#0x80     ;   |= TXEIE
+      0x0800d194  str  r1,[r0,#4]   ; DR <- the byte
+
+USART1_IRQHandler 0x0800c84c   (0x0800c87e = USART2, 0x0800c8b0 = USART3)
+      CR1 bit5 RXNEIE & SR bit5 RXNE -> ldr r0,[r4,#4] (DR) -> bl 0x0800c946  fnSciRxByte
+      CR1 bit7 TXEIE  & SR bit7 TXE  ->                        bl 0x0800f460  fnSciTxByte
+```
+
+The model answers `SR.TXE`/`SR.TC` set, `SR.RXNE` set while a host byte is queued,
+pops that byte on a `DR` read and captures a `DR` write. Everything else is plain
+write-through/read-back, because the ISR **branches on CR1** and a model that did
+not return what the driver wrote would make the firmware's own ISR do nothing —
+and the seam would have looked dead for a reason that was ours.
+
+**It mints the wire condition and nothing else.** The reply is composed entirely
+inside the guest: `fnSciRxByte` in, `fnSciTxByte` → `fnTxByte` → `DR` out. This
+is RULES §1c's shape — the host mints the wire field, the firmware does the
+transform.
+
+### 2. `bp_handlers/serial_bridge.py` — and it calls the handler the FIRMWARE installed
+
+This image has no IRQ vectors (it starts at 0x0800c080 with only SP+Reset), so the
+core cannot deliver IRQ 37/38/39. uTasker relocates its vector table into SRAM at
+0x20000000 and `fnConfigSCI` installs its own handler there. **The bridge reads
+that table back before it calls anything**, at `[0x20000000 + 0x40 + 4*IRQ]`, and
+refuses to inject if the address is not the one it expected.
+
+⭐ **That check earned its keep on the first boot, in both directions.** Early in
+the boot the three vectors read `0x0800e3d1` — uTasker's default handler — and the
+bridge declined. Once `fnConfigSCI` had run they read:
+
+```
+serial_bridge: IRQ 37 vector [0x200000d4] = 0x0800e3d1, calling 0x0800c84c -- firmware's own handler: NO
+serial_bridge: IRQ 38 vector [0x200000d8] = 0x0800e3d1, calling 0x0800c87e -- firmware's own handler: NO
+serial_bridge: IRQ 39 vector [0x200000dc] = 0x0800e3d1, calling 0x0800c8b0 -- firmware's own handler: NO
+   ... later, after fnConfigSCI ...
+serial_bridge: IRQ 37 vector [0x200000d4] = 0x0800c84d, calling 0x0800c84c -- firmware's own handler: YES
+serial_bridge: IRQ 38 vector [0x200000d8] = 0x0800c87f, calling 0x0800c87e -- firmware's own handler: YES
+serial_bridge: IRQ 39 vector [0x200000dc] = 0x0800c8b1, calling 0x0800c8b0 -- firmware's own handler: YES
+```
+
+`0x0800c84d` / `0x0800c87f` / `0x0800c8b1` are exactly the three addresses
+recovered by disassembly, with the Thumb bit — **the firmware's own statement of
+who handles those interrupts**, not our choice of entry point. (An early version
+latched the first `NO` and disabled the bridge for the whole run; it now re-checks
+until the table agrees, because a table the firmware has not filled in yet is not
+a disagreement.)
+
+**It shares `eth_bridge`'s borrowed-context machinery deliberately.** Two
+independent borrowers would each keep their own `_busy` flag and could inject a
+call while the other's was in flight, corrupting the saved context. One borrower,
+one `_busy`. Serial work is *not* gated on the ETH driver being up (different
+link), and it injects only when the host has queued a byte or the firmware's own
+driver has left `TXEIE` set — so **a run that never uses the console is
+byte-identical to one without it**, which is what kept M4/M6/M7 unmoved.
+
+### ⚠ A1 WAS REFUTED, AND IT MATTERED: the firmware opens THREE UARTs
+
+Part A of `predictions/2026-09-29-m8-serial-console.md` predicted **exactly one**
+configured block, and USART1. Measured on the first boot with the USART page
+mapped:
+
+```
+uart 0x40011000: CR1 0x0000 -> 0x2024 (UE=1 TE=0 RE=1 TXEIE=0 RXNEIE=1) pc=0x0800cdce
+uart 0x40011000: CR1 0x2024 -> 0x202c (UE=1 TE=1 RE=1 TXEIE=0 RXNEIE=1) pc=0x0800d09c
+uart 0x40004400: CR1 0x0000 -> 0x2024 ...
+uart 0x40004800: CR1 0x0000 -> 0x2024 ...
+```
+
+**Three blocks opened, all with UE|TE|RE|RXNEIE.** "A UART is open" would have
+grown the denominator from 2 to 4. So the question became a measurement, and it
+was run twice.
+
+**Which one carries the console: asked, not assumed.** The same bytes go to all
+three in **one observation window**, and the window closes only once at least one
+has answered and gone quiet — so the block that answers is the **positive control
+for the two that do not**, in the same window. (An earlier version waited on each
+block in turn, which meant a silent block was observed in a *different* window
+from the answering one and its silence was always arguable.) Every default run
+since:
+
+```
+console_probe: the firmware opened 3 USART blocks; 1 answered a bare CR: ['0x40004800']
+   result={'0x40011000': 0, '0x40004400': 0, '0x40004800': 719}
+```
+
+**Are USART1/USART2 MODBUS-RTU slave ports?** A well-formed FC03 with a correct
+CRC-16 was delivered to both at slave addresses **1..8 and 0xff**. The firmware's
+own driver **read every byte** (the model logged each `DR` read, so `fnSciRxByte`
+ran) and **transmitted nothing**.
+
+⚠ **The first arm of that test was not interpretable and I did not quote it as if
+it were.** `eth_bridge` only advances the RTOS clock after three TX frames, so in
+a console-only boot `fnRtmkSystemTick` never fires and an RTU **end-of-frame
+timer** could never expire — the silence would have been the model's, not the
+firmware's. *A null result eliminates nothing unless the model was right.* It was
+re-run with a MODBUS/TCP session first and `HAL_UT_TICK_HZ=20`, on a boot where
+the console answered (positive control) and the guest's own `up_time` advanced
+`0:01:22 -> 0:01:38` (so the clock demonstrably was running). Both blocks stayed
+silent in that arm too.
+
+**Verdict:** an open link with no application behind it fails §1d's test — *would
+this firmware, running, ever serve that interface?* — so they are recorded under
+`not_interfaces` with their measurement, and **n stays 2**.
+
+### The console's own published menu is the SHRINK GUARD, not the denominator
+
+`device-vesc-bms`'s formula, applied: *the firmware's own published menu, parsed
+from the guest's bytes every run, with a pre-registered token set as a shrink
+guard — mismatch either way VOIDS parity.* Parsed live, every round:
+
+```
+     Main menu            1 2 3 4 5 6 7 8 9 a help quit                (12 tokens)
+   Stats. menu            up ipstat r_ipstat up_time memory help quit   ( 7 tokens)
+```
+
+⚠ **And it is emphatically NOT the interface inventory.** This row's own
+2026-09-17 finding is that this table is a **command list**, not a capability
+manifest — it offers *Go to USB menu*, *Go to I2C menu*, *CAN commands* and *Go to
+utFAT disk interface* on a build that implements none of them. 12 ≠ 2, and a test
+asserts the guard's size is not the denominator.
+
+### The console seam's M4 — seven terms per round, 3 of 3 rounds, three default runs
+
+| term | what it is constructed from |
+|---|---|
+| `menu_matches_registered` | the guest's own main-menu tokens == the pre-registered 12. **Mismatch either way VOIDS.** |
+| `stats_menu_matches` | `5` navigates, and the guest prints exactly its 7 stats tokens — a second declared command, and the firmware's own menu state machine |
+| `ipstat_invariant` | **a VALUE with an invariant the firmware maintains**: `Total Rx frames` == the sum of its own nine per-protocol Rx counters, `Total Tx frames` == the sum of its four Tx counters, both non-zero. Measured every round: **Rx 169 = 169, Tx 57 = 57** |
+| `memory_invariant` | **a second VALUE, of a different kind**: `Free heap = 0x38a0 from 0x8000`, with 0 < free < total (and the boot banner's own `OS Heap use = 0x3040 from 0x8000` is the same total) |
+| `undeclared_refused` | a **per-round random** token (`z` + 3 random bytes hex) draws the guest's own `??` and **no menu** |
+| `discriminates` | RULES §1c: a boolean "it replied" is the weak case. The declared and undeclared replies must **differ** |
+| `alive_after` | the menu still answers after the bad token |
+
+**Rule 2, per entry:** `passed == rounds`, never `>= 1`. Three rounds, seven terms,
+all true, on each of **3 of 3** default runs.
+
+**A reply still arriving when its ceiling expires is `growing`, and the round is
+recorded UNMEASURED — never failed.** A probe that stops a fixed time after the
+last byte it happened to see has produced five false failures on this fleet;
+`console.read_until_quiet` returns `quiet` / `silent` / `growing` as three distinct
+statuses and *cannot-measure never shares a value with measured-and-bad*.
+
+### Each entry has its OWN witness, and each witness carries a VALUE
+
+⚠ On another row **two entries were DECLARED ANSWERED BUT NOT DRIVEN**, sharing
+one `Done!` string at one address. Here:
+
+* **MODBUS/TCP :502** — the FC06 read-back of an attacker-chosen 16-bit value
+  through the firmware's own MODBUS engine (`0x1234 -> 0x1244`, high byte
+  compared because the low bits are live), gated on provenance.
+* **the serial console** — the guest's own `ipstat` counter-addition invariant and
+  its own `Free heap` figure, plus a declared/undeclared discrimination.
+
+They share no term, no variable and no string, and a test asserts it.
+
+### ⚠ THE FALSE FLOOR I FOUND IN THIS ROW AND REMOVED
+
+`attack.py` carried
+
+```python
+M5_AT_M4 = 1          # MODBUS/TCP :502
+M8_AT_M4 = 1          # same seam, counted under the other rung's currency
+```
+
+and `INTERFACE_INVENTORY["m8"]` was built from them. **A hard-coded numerator
+credits an interface in a run that never touched it, and no control arm can move
+it.** Both are gone; `interface_parity(result)` computes the numerator from the
+run's own observations, and `tests/test_m5_m8_status.py` asserts the constants no
+longer exist and that a run which drove nothing reports **0 of 2**.
+
+`M5_M8_STATUS` was likewise a string beginning `"DEFINED and UNMET at 1 of 2"` —
+the same floor in prose. It is now `M5_M8_DERIVATION` (the static *derivation*,
+which is a property of the image) plus `m5_m8_status(parity)`, which prefixes the
+run's measured `k of n`.
+
+### The falsification knob — `--console-deaf`, and it BINDS
+
+The host's bytes are still queued into the USART model's RX FIFO and the model
+still answers `SR`/`DR`; the **only** thing removed is the call to the firmware's
+own ISR, so nothing reaches `fnSciRxByte`.
+
+```
+console_probe: the firmware opened 3 USART blocks; 0 answered a bare CR: []
+console: no opened USART block answered a bare CR; the console entry was DRIVEN and did not answer
+console: 0/3 rounds (deaf arm=True, voided=False, unmeasured=0) -> False
+RESULT: landed:true  milestone:"M7"  modbus_round_trip:true  m6:3/3  m7:8/8
+        console_round_trip:false  interface_parity_full:false
+PARITY: 1 of 2  passed=[0]
+```
+
+**Parity 2 of 2 -> 1 of 2, M8 -> M7, and :502 untouched.** That is the
+control-gated verdict for M8.
+
+⚠ **And it fails as MEASURED-AND-FAILED, not as voided.** The first cut treated
+"no block answered" as a void, which printed *"no parity is published"* — a knob
+whose outcome is indistinguishable from a measurement error is not a knob.
+`len(answered) == 0` is now a **failed entry** and only `len(answered) > 1` (the
+seam not identified) voids.
+
+**`--no-console` is the other half, and the two are different fields.** It skips
+the phase with the USART page still mapped, so the machine is identical:
+`console_round_trip: null` + `console_skipped_reason: "console_phase=False"`,
+parity **1 of 2** because the entry was **NOT MEASURED**. The deaf arm is
+`console_round_trip: false` + `0/3` + a `failed_reason`. *Unmeasured is never
+implied-refused.*
+
+### ⚠ A DEFECT IN MY OWN WORK, and a latent one in this row that it exposed
+
+I ran two arms of this device **concurrently**, and `run_attack` built its child
+log path from a **fixed basename**:
+
+```python
+log_path = os.path.join(ld, "utasker_modbus_attack.log")
+```
+
+`provenance.bridge_bound` is read back **out of that file**, so the second arm's
+`open(..., "w")` **truncated the first arm's log** and the first could no longer
+find its own `spool=` line. The measured consequence: an arm with
+`write_acknowledged: true` and `after_hex: 0x1244` — a **completed round trip** —
+printed `landed: false, milestone: M3`.
+
+* The path now carries the pid and a millisecond stamp.
+* **No recorded result was ever inflated by this.** The string searched for
+  contains the run's own unguessable private spool path, so a false *positive* was
+  never possible; it manufactures false *negatives*, which is how it was caught.
+* The affected arm (`--console-deaf`, first attempt) is **discarded, not
+  reinterpreted**, and was re-run alone. The re-run is the one quoted above.
+
+### Every arm, this session
+
+**⚠ THE BOX WAS AT LOAD 21–26 (ten lanes).** Every load figure is reported per run
+and never averaged, and **no verdict here rests on elapsed time** — the witnesses
+are values the guest emitted (counters, heap figures, register read-backs, menu
+tokens). The one place wall-clock enters is the quiescence window, and that is
+constructed so a slow box yields `growing` → *unmeasured*, not a failure.
+
+| arm | load at launch | booted | landed | milestone | M6 | M7 | console | parity | `entitled()` |
+|---|---|---|---|---|---|---|---|---|---|
+| default #1 | 20.98 | true | true | **M8** | 3/3 | 8/8 | **3/3** | **2 of 2** | M8 |
+| default #2 | 23.65 | true | true | **M8** | 3/3 | 8/8 | **3/3** | **2 of 2** | M8 |
+| default #3 | 21.90 | true | true | **M8** | 3/3 | 8/8 | **3/3** | **2 of 2** | M8 |
+| `--console-deaf` | 21.90 | true | true | **M7** | 3/3 | 8/8 | **0/3** | **1 of 2** | M7 |
+| `--console-deaf` (1st try, VOID) | 23.88 | true | *false* | *M3* | 3/3 | 8/8 | 0/3 | 0 of 2 | M3 |
+| `--no-console` | 23.65 | true | true | M7 | 3/3 | 8/8 | **not measured** | 1 of 2 | M7 |
+| `--m6-freeze` | 21.38 | true | true | M8 | **0/3** | 8/8 | 3/3 | 2 of 2 | M8 |
+| `--m7-wellformed` | 21.43 | true | true | M8 | 3/3 | **0/8** | 3/3 | 2 of 2 | M8 |
+| `--no-ladder` | 19.51 | true | true | **M4** | skipped | skipped | not measured | 1 of 2 | M4 |
+| `HAL_SEAM_CONTROL=1` | 19.72 | true | **false** | **M3** | — | — | — | 0 of 2 | M3 |
+| `HAL_PY=/usr/bin/false` | 20.26 | **false** | false | **M0** | — | — | — | 0 of 2 | M0 |
+
+**N-of-N, not `>= 1`:** the default path is **3 of 3** runs at `M8`, each with M6
+3/3, M7 8/8 and the console 3/3 — `passed == rounds` in every phase of every run.
+The seven milestone values the ladder can write are the seven these eleven arms
+printed, so **WRITTEN == PRINTABLE** is demonstrated by runs and not only by `ast`.
+
+The `--console-deaf` first attempt is in the table **because it is in the record**,
+voided by the log-path defect above, not deleted from it. Note that `entitled()`
+agrees with it too: its observations genuinely did not support M4, *because the
+provenance term it reads was the one that broke*. The check caught no
+credited-but-not-entitled; the **log-path race** is what caught that arm, and a
+reader should see both facts.
+
+⚠ **`--m6-freeze` and `--m7-wellformed` now print `M8`, where they used to print
+`M7` and `M6`.** That is not a regression and not a cap being lifted: **M8 is a
+COVERAGE rung** and, per the 2026-09-02 ruling that a scorer chaining
+`M7 <- M6 <- M5` is a defect in the scorer, it is graded off each entry's own M4
+witness — which those two knobs do not touch. Each knob is still demonstrably
+binding, in its own column: `0/3` and `0/8`. **A reader must not read `M8` on
+those two arms as a claim about M6 or M7**; the per-rung numbers in the row are
+the claim, and on those arms one of them is deliberately false.
+
+**The firmware image is byte-identical before and after every arm**
+(`sha256 dc28f4280d97e92c8736ebfe8148238b2a06f2b612bd8e18b94e4c49cb8ca860`,
+checked on both sides of every chain).
+
+### The ladder, enumerated — and M5 is deliberately not a milestone VALUE
+
+`ast` over `attack.py`: the milestone values **written** are exactly
+`{None, "M0", "M3", "M4", "M6", "M7", "M8"}`, and every one is **printable** by a
+documented invocation (firmware moved aside → `M0`; `HAL_SEAM_CONTROL=1` → `M3`;
+`--no-ladder` → `M4`; `--m7-wellformed` → `M6`; `--console-deaf` → `M7`; default →
+`M8`; a harness fault → `None`). **WRITTEN == PRINTABLE.**
+
+⚠ **`"M5"` is still not a milestone value, and that is not a cap.** This row's
+independent set and its declared set are the **same two entries**, so
+`len(passed) == 2` makes M5 and M8 true *together* and `len(passed) < 2` makes both
+false: an "M5 but not M8" state has no shape on this row. M5's own `k of n` is
+published in `interface_parity["m5"]`, computed from a **separate expression over
+a separate list** (w92.1's invariant is one VARIABLE, not one VALUE).
+
+### CHECK 3 — `entitled()` over the OBSERVATIONS, and why the term enumerator cannot do it
+
+`tools/entitled.py` re-derives the rung from §0's own wording applied to the run's
+**observations** — it recomputes the FC06 high-byte comparison from
+`attack.after`/`attack.value` rather than reading `attack.landed`, re-checks every
+console round's terms, and never reads `milestone`, `landed`,
+`interface_parity_full` or `m5_m8_status`. It was **committed before the graded
+arms were run** (`699927c`), and it reports `credited-but-not-entitled`.
+
+**Run over all eleven arms of this session: `credited-but-not-entitled` = 0**, with
+the independent derivation agreeing with the printed rung on every one
+(`M8 M8 M8 M7 M7 M4 M3 M0 M8 M8 M3`). `landed` assignment sites in `attack.py`
+= **2** (> 0, asserted).
+
+⚠ The fleet's standard `enumerate_ladder.py` **cannot** do this: it runs
+`itertools.product((False, True), repeat=len(TERMS))` into the ladder, so it
+quantifies over the ladder's **terms** and never inspects how a term is
+**constructed**. A ladder can be a correct function of its terms while a term is
+itself circular, and it reports CLEAN either way.
+
+⚠ **Checks 1 and 2 are 0 BY CONSTRUCTION on this row and prove nothing.** `landed`
+is built from `modbus_round_trip AND provenance.ok` and `milestone` is then derived
+*from* `landed`, so "landed without M4" and "landed disagrees with the rung" cannot
+fire. `entitled.py` says so in its own output rather than presenting the zeros as a
+pass, and it asserts the `landed` **assignment-site count is > 0** — a `landed`
+never assigned from an observation would be derived from the rung instead.
+
+### Emulator-free controls (`tests/test_console_seam.py`, 17 tests)
+
+The numerator can reach **zero** with the **real** graders:
+
+* `test_a_dead_wire_credits_no_interface` — the real `run_console` against a spool
+  no emulator is servicing: `0` rounds, `failed_reason` set, `voided` false,
+  parity **1 of 2**.
+* `test_a_TRUNCATED_menu_does_not_match_and_so_VOIDS` / `..._an_EXTENDED_menu...` —
+  the shrink guard, **both** directions.
+* `test_the_ipstat_invariant_CATCHES_a_fabricated_block` — a plausible-but-wrong
+  total (`20 -> 21`) breaks the Rx invariant and leaves the Tx one intact.
+* `test_a_zeroed_ipstat_block_fails_the_nonzero_term` — all-zeros adds up
+  perfectly, which is exactly why `rx_nonzero`/`tx_nonzero` are separate terms.
+* `test_the_bridge_refuses_a_handler_the_firmware_did_not_install` — vectors
+  reading `0x0800e3d1`: no injection at all.
+* `test_the_DEAF_knob_ingests_but_never_calls_the_firmware` — the knob is not
+  inert in the other direction either: the bytes still reach the model's RX FIFO.
+* `test_an_empty_inventory_is_a_FAULT_and_never_0_of_0` — `all([])` is vacuously
+  true and has scored a dead arm as perfect twice on this fleet.
+
+### What is NOT claimed
+
+* **`up_time` is recorded, not graded.** It advances only when the free-running
+  RTOS tick is on, and the default path leaves it off (`eth_bridge.__init__`
+  assigns `self._tick_hz` **twice**, the second with default `"0"`, which disables
+  the free-running tick — that looks like an unintended duplicate and is recorded
+  rather than changed, because changing it would perturb the MODBUS evidence this
+  session had to leave untouched).
+* **The `ipstat` cross-check is corroboration, not a gating term.** It is reported:
+  `guest_total_tx 57` == `host_frames_received 57` exactly, and
+  `guest_total_rx 169 >= host_frames_injected 112`. It is the deaf-console guard —
+  those numbers exist in no handler, model or config of ours — and it gates
+  nothing, so no other rung's evidence is imported into this one.
+* **USART1/USART2 at slave addresses outside 1..8 and 0xff were not probed.** If a
+  MODBUS-RTU slave were listening there on some other address the sweep would have
+  missed it; the exclusion rests on 10 addresses, a positive control and a running
+  clock, and that is what it rests on.
+* **No core change.** This row runs against the installed core through
+  `.venv-dev`; `spawn.py` strips `HALUCINATOR_SRC`/`PYTHONPATH`.
+
+**NEW `M4-OK` credits created by this session: 1** — the serial console seam. The
+row was already `M4-OK` on :502 and still is; `verdict=` is unchanged because
+`landed: true` means M4 and only M4.
+
+### Scored by the fleet guard, IMPORTED and never forked
+
+Every arm scored by importing `scratch-census-guard-a48/census_score.py`
+(sha256 `56cd3ab36c942ff1141dd8a24dfa6a09a813080ed8c69d50950869db592f13cc`):
+
+```
+default #1 / #2 / #3      booted:true  landed:true   M8  M4-OK   "milestone M8"
+--console-deaf            booted:true  landed:true   M7  M4-OK   "milestone M7; unmet sub-goal(s) disclosed: console_round_trip"
+--console-deaf (1st, VOID) booted:true landed:false  M3  WALL-M3 "landed:false -- no claim to check"
+--no-console              booted:true  landed:true   M7  M4-OK   "milestone M7"
+--m6-freeze               booted:true  landed:true   M8  M4-OK   "milestone M8"
+--m7-wellformed           booted:true  landed:true   M8  M4-OK   "milestone M8"
+--no-ladder               booted:true  landed:true   M4  M4-OK   "milestone M4"
+HAL_SEAM_CONTROL=1        booted:true  landed:false  M3  WALL-M3 "landed:false -- no claim to check"
+HAL_PY=/usr/bin/false     booted:false landed:false  M0  WALL-M0 "landed:false -- no claim to check"
+```
+
+**CHECK 1 — `DEFECT-landed-without-M4`: 0.** **CHECK 2 — landed-vs-rung
+disagreement: 0.** ⚠ Both are **0 by construction** here, stated rather than
+claimed as a pass: `landed` is built from `modbus_round_trip AND provenance.ok`
+and `milestone` is derived *from* `landed`, so neither check can fire on this row.
+**CHECK 3 — `credited-but-not-entitled`: 0 over all eleven arms**, computed over
+each run's OBSERVATIONS by `tools/entitled.py`, which was committed before the
+graded arms ran. That is the one of the three that could have failed.
+
+**No performance regression from the serial bridge.** `--no-ladder` (the same
+MODBUS work, with the USART page mapped and the bridge installed) completed in
+27 s at load 19.5; the pre-change baseline was 34 s at load 5.1. Both are
+wall-clock on a shared box and are **indicative only** — the structural reason a
+console-free run is unaffected is that the bridge injects nothing at all unless a
+byte is queued or the firmware's own driver has left `TXEIE` set.
+
+### Referral to `device-utasker-usb` — and it is NOT corroboration
+
+`device-utasker-usb` records its own M8 gap as *"reached `fnEndpointData`, never
+reached `fnCommandInput`… find what starts the `maintenace` task"*. That row and
+this one share uTasker and a vendor tree, so "the uTasker command task is never
+dispatched" looks like one finding seen twice.
+
+⚠ **It is not. Measured here: on THIS image the command console task runs
+perfectly well with no help at all** — the firmware printed its own
+`Hello, world... NUCLEO-F429ZI (STM32F429ZI)`, `Serial number:`,
+`Software version V1.4.012` and its full Main menu unprompted, and answered
+`help` / `5` / `ipstat` / `memory` / `up_time` / `quit` / an unknown token. So
+uTasker's console task is **not** the thing that fails to be dispatched, and the
+USB row's wall must be **USB-specific** (the event that wakes the task which
+drains the USB CDC queue), not a general uTasker scheduling gap.
+
+**Two sibling rows agreeing is one observation until each has been measured
+separately.** This is the measurement for this row; the USB row still needs its
+own.
